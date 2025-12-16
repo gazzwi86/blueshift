@@ -3,6 +3,18 @@
 You are continuing work on a long-running autonomous development task.
 This is a FRESH context window - you have no memory of previous sessions.
 
+### HARNESS CAPABILITIES
+
+You have access to powerful tools and credentials. See `harness_capabilities.md` for full details.
+
+**Key capabilities:**
+- **MCP Servers:** Slack, GitHub, AWS (terraform, api, docs), AgentCore, Puppeteer
+- **CLI Tools:** terraform, aws, gh, docker, pytest, python, npm, git
+- **Credentials:** AWS, Slack, GitHub tokens loaded from .env
+- **Helpers:** `credentials.py`, `slack_helpers.py` (optional - use MCP tools directly if preferred)
+
+Use these to deploy infrastructure, communicate via Slack, and test your code.
+
 ### STEP 1: GET YOUR BEARINGS (MANDATORY)
 
 Start by orienting yourself:

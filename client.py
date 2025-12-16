@@ -8,10 +8,12 @@ Functions for creating and configuring the Claude Agent SDK client.
 import json
 import os
 from pathlib import Path
+from typing import Optional
 
 from claude_code_sdk import ClaudeCodeOptions, ClaudeSDKClient
 from claude_code_sdk.types import HookMatcher
 
+from credentials import Credentials, get_env_for_mcp_servers
 from security import bash_security_hook
 
 
@@ -26,6 +28,46 @@ PUPPETEER_TOOLS = [
     "mcp__puppeteer__puppeteer_evaluate",
 ]
 
+# Slack MCP tools
+SLACK_TOOLS = [
+    "mcp__slack__list_channels",
+    "mcp__slack__post_message",
+    "mcp__slack__reply_to_thread",
+    "mcp__slack__add_reaction",
+    "mcp__slack__get_channel_history",
+    "mcp__slack__get_thread_replies",
+    "mcp__slack__search_messages",
+    "mcp__slack__get_users",
+    "mcp__slack__get_user_profile",
+]
+
+# GitHub MCP tools
+GITHUB_TOOLS = [
+    "mcp__github__create_or_update_file",
+    "mcp__github__search_repositories",
+    "mcp__github__create_repository",
+    "mcp__github__get_file_contents",
+    "mcp__github__push_files",
+    "mcp__github__create_issue",
+    "mcp__github__create_pull_request",
+    "mcp__github__fork_repository",
+    "mcp__github__create_branch",
+    "mcp__github__list_commits",
+    "mcp__github__list_branches",
+]
+
+# AWS MCP tools (generic pattern - actual tools depend on server)
+AWS_MCP_TOOLS = [
+    # These are patterns - actual tool names vary by MCP server
+    "mcp__agentcore__*",
+    "mcp__aws-terraform__*",
+    "mcp__aws-api__*",
+    "mcp__aws-docs__*",
+    "mcp__aws-knowledge__*",
+    "mcp__terraform-registry__*",
+    "mcp__context7__*",
+]
+
 # Built-in tools
 BUILTIN_TOOLS = [
     "Read",
@@ -37,13 +79,113 @@ BUILTIN_TOOLS = [
 ]
 
 
-def create_client(project_dir: Path, model: str) -> ClaudeSDKClient:
+def build_mcp_servers(creds: Optional[Credentials] = None) -> dict:
+    """
+    Build MCP server configuration.
+
+    Args:
+        creds: Optional credentials object for environment variables
+
+    Returns:
+        Dict of MCP server configurations
+    """
+    env_vars = get_env_for_mcp_servers(creds) if creds else {}
+
+    servers = {
+        # Browser automation
+        "puppeteer": {
+            "command": "npx",
+            "args": ["-y", "@anthropic/puppeteer-mcp-server"]
+        },
+
+        # Slack (if credentials available)
+        "slack": {
+            "command": "npx",
+            "args": ["-y", "@anthropic/mcp-server-slack"],
+            "env": {
+                "SLACK_BOT_TOKEN": env_vars.get("SLACK_BOT_TOKEN", ""),
+                "SLACK_APP_TOKEN": env_vars.get("SLACK_APP_TOKEN", ""),
+            }
+        },
+
+        # GitHub (if credentials available)
+        "github": {
+            "command": "npx",
+            "args": ["-y", "@anthropic/mcp-server-github"],
+            "env": {
+                "GITHUB_TOKEN": env_vars.get("GITHUB_TOKEN", ""),
+            }
+        },
+
+        # AWS & AgentCore (uvx-based)
+        "agentcore": {
+            "command": "uvx",
+            "args": ["awslabs.amazon-bedrock-agentcore-mcp-server@latest"]
+        },
+
+        "aws-terraform": {
+            "command": "uvx",
+            "args": ["awslabs.terraform-mcp-server@latest"],
+            "env": {
+                "AWS_REGION": env_vars.get("AWS_REGION", "ap-southeast-2"),
+                "FASTMCP_LOG_LEVEL": "ERROR",
+                **{k: v for k, v in env_vars.items() if k.startswith("AWS_")},
+            }
+        },
+
+        "aws-knowledge": {
+            "command": "uvx",
+            "args": ["fastmcp", "run", "https://knowledge-mcp.global.api.aws"]
+        },
+
+        "aws-api": {
+            "command": "uvx",
+            "args": ["awslabs.aws-api-mcp-server@latest"],
+            "env": {
+                "AWS_REGION": env_vars.get("AWS_REGION", "ap-southeast-2"),
+                "AWS_API_MCP_PROFILE_NAME": env_vars.get("AWS_PROFILE", ""),
+                **{k: v for k, v in env_vars.items() if k.startswith("AWS_")},
+            }
+        },
+
+        "aws-docs": {
+            "command": "uvx",
+            "args": ["awslabs.aws-documentation-mcp-server@latest"]
+        },
+
+        # Terraform Registry (Docker-based)
+        "terraform-registry": {
+            "command": "docker",
+            "args": ["run", "-i", "--rm", "hashicorp/terraform-mcp-server:0.3.0"]
+        },
+
+        # Context7 (HTTP transport)
+        # Note: HTTP transport may need special handling in claude_code_sdk
+        "context7": {
+            "command": "npx",
+            "args": ["-y", "@anthropic/mcp-proxy"],
+            "env": {
+                "MCP_PROXY_URL": "https://mcp.context7.com/mcp",
+                "CONTEXT7_API_KEY": env_vars.get("CONTEXT7_API_KEY", ""),
+            }
+        },
+    }
+
+    return servers
+
+
+def create_client(
+    project_dir: Path,
+    model: str,
+    creds: Optional[Credentials] = None,
+) -> ClaudeSDKClient:
     """
     Create a Claude Agent SDK client with multi-layered security.
 
     Args:
         project_dir: Directory for the project
         model: Claude model to use
+        creds: Optional credentials object
 
     Returns:
         Configured ClaudeSDKClient
@@ -60,6 +202,16 @@ def create_client(project_dir: Path, model: str) -> ClaudeSDKClient:
             "ANTHROPIC_API_KEY environment variable not set.\n"
             "Get your API key from: https://console.anthropic.com/"
         )
+
+    # Build MCP server configuration
+    mcp_servers = build_mcp_servers(creds)
+
+    # Collect all MCP tool patterns for permissions
+    all_mcp_tools = [
+        *PUPPETEER_TOOLS,
+        *SLACK_TOOLS,
+        *GITHUB_TOOLS,
+    ]
 
     # Create comprehensive security settings
     # Note: Using relative paths ("./**") restricts access to project directory
@@ -78,8 +230,16 @@ def create_client(project_dir: Path, model: str) -> ClaudeSDKClient:
                 # Bash permission granted here, but actual commands are validated
                 # by the bash_security_hook (see security.py for allowed commands)
                 "Bash(*)",
-                # Allow Puppeteer MCP tools for browser automation
-                *PUPPETEER_TOOLS,
+                # Allow all MCP tools
+                *all_mcp_tools,
+                # Wildcard patterns for AWS/Terraform MCP tools
+                "mcp__agentcore__*",
+                "mcp__aws-terraform__*",
+                "mcp__aws-api__*",
+                "mcp__aws-docs__*",
+                "mcp__aws-knowledge__*",
+                "mcp__terraform-registry__*",
+                "mcp__context7__*",
             ],
         },
     }
@@ -96,7 +256,9 @@ def create_client(project_dir: Path, model: str) -> ClaudeSDKClient:
     print("   - Sandbox enabled (OS-level bash isolation)")
     print(f"   - Filesystem restricted to: {project_dir.resolve()}")
     print("   - Bash commands restricted to allowlist (see security.py)")
-    print("   - MCP servers: puppeteer (browser automation)")
+    print("   - MCP servers configured:")
+    for name in mcp_servers:
+        print(f"     - {name}")
     print()
 
     return ClaudeSDKClient(
@@ -105,11 +267,9 @@ def create_client(project_dir: Path, model: str) -> ClaudeSDKClient:
             system_prompt="You are an expert full-stack developer building a production-quality web application.",
             allowed_tools=[
                 *BUILTIN_TOOLS,
-                *PUPPETEER_TOOLS,
+                *all_mcp_tools,
             ],
-            mcp_servers={
-                "puppeteer": {"command": "npx", "args": ["puppeteer-mcp-server"]}
-            },
+            mcp_servers=mcp_servers,
             hooks={
                 "PreToolUse": [
                     HookMatcher(matcher="Bash", hooks=[bash_security_hook]),

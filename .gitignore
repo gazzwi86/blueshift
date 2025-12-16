@@ -19,6 +19,9 @@ logs/
 .terraform/
 .terraform.lock.hcl
 
+# Generated infrastructure config (contains IDs)
+generated_config.json
+
 # Claude settings (may contain paths)
 .claude_settings.json
 

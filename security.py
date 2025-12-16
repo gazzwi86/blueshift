@@ -11,7 +11,6 @@ import shlex
 
 
 # Allowed commands for development tasks
-# Minimal set needed for the autonomous coding demo
 ALLOWED_COMMANDS = {
     # File inspection
     "ls",
@@ -20,49 +19,54 @@ ALLOWED_COMMANDS = {
     "tail",
     "wc",
     "grep",
-    
     # File operations (agent uses SDK tools for most file ops, but cp/mkdir needed occasionally)
     "cp",
     "mkdir",
     "chmod",  # For making scripts executable; validated separately
-    
     # Directory
     "pwd",
-    
     # Node.js development
     "npm",
     "node",
-    
+    "npx",
     # Version control
     "git",
-    
     # Process management
     "ps",
     "lsof",
     "sleep",
     "pkill",  # For killing dev servers; validated separately
-    
     # Script execution
     "init.sh",  # Init scripts; validated separately
-    
-    # Infrastructure
+    # Infrastructure (validated separately)
     "terraform",
     "aws",
-
     # GitHub
     "gh",
-
     # Testing
     "pytest",
     "python",
-
-    # Docker (for local testing)
+    "python3",
+    # Docker (validated separately)
     "docker",
     "docker-compose",
+    # Package management
+    "pip",
+    "pip3",
+    "uv",
+    "uvx",
 }
 
 # Commands that need additional validation even when in the allowlist
-COMMANDS_NEEDING_EXTRA_VALIDATION = {"pkill", "chmod", "init.sh"}
+COMMANDS_NEEDING_EXTRA_VALIDATION = {
+    "pkill",
+    "chmod",
+    "init.sh",
+    "terraform",
+    "aws",
+    "docker",
+    "docker-compose",
+}
 
 
 def split_command_segments(command_string: str) -> list[str]:
@@ -297,6 +301,124 @@ def validate_init_script(command_string: str) -> tuple[bool, str]:
     return False, f"Only ./init.sh is allowed, got: {script}"
 
 
+def validate_terraform_command(command_string: str) -> tuple[bool, str]:
+    """
+    Validate terraform commands - allow all standard operations.
+
+    Terraform destroy is allowed (user confirmed).
+
+    Returns:
+        Tuple of (is_allowed, reason_if_blocked)
+    """
+    try:
+        tokens = shlex.split(command_string)
+    except ValueError:
+        return False, "Could not parse terraform command"
+
+    if not tokens or tokens[0] != "terraform":
+        return False, "Not a terraform command"
+
+    # All terraform subcommands are allowed
+    # Including: init, plan, apply, destroy, output, state, etc.
+    return True, ""
+
+
+def validate_aws_command(command_string: str) -> tuple[bool, str]:
+    """
+    Validate AWS CLI commands - block destructive IAM and account operations.
+
+    Returns:
+        Tuple of (is_allowed, reason_if_blocked)
+    """
+    try:
+        tokens = shlex.split(command_string)
+    except ValueError:
+        return False, "Could not parse aws command"
+
+    if not tokens or tokens[0] != "aws":
+        return False, "Not an aws command"
+
+    # Get the service and operation
+    # Format: aws <service> <operation> [options]
+    args = [t for t in tokens[1:] if not t.startswith("-")]
+
+    if len(args) < 2:
+        # Allow commands like "aws --version" or "aws configure"
+        return True, ""
+
+    service = args[0]
+    operation = args[1]
+
+    # Block dangerous IAM operations
+    blocked_iam_operations = {
+        "delete-user",
+        "delete-role",
+        "delete-policy",
+        "delete-access-key",
+        "delete-account-alias",
+        "delete-account-password-policy",
+    }
+    if service == "iam" and operation in blocked_iam_operations:
+        return False, f"aws iam {operation} is blocked for safety"
+
+    # Block dangerous Organizations operations
+    blocked_org_operations = {
+        "delete-organization",
+        "leave-organization",
+        "remove-account-from-organization",
+    }
+    if service == "organizations" and operation in blocked_org_operations:
+        return False, f"aws organizations {operation} is blocked for safety"
+
+    # Block account closure
+    if service == "account" and operation == "close-account":
+        return False, "aws account close-account is blocked for safety"
+
+    # All other AWS operations are allowed
+    return True, ""
+
+
+def validate_docker_command(command_string: str) -> tuple[bool, str]:
+    """
+    Validate Docker commands - block privileged mode and dangerous mounts.
+
+    Returns:
+        Tuple of (is_allowed, reason_if_blocked)
+    """
+    try:
+        tokens = shlex.split(command_string)
+    except ValueError:
+        return False, "Could not parse docker command"
+
+    if not tokens or tokens[0] not in ("docker", "docker-compose"):
+        return False, "Not a docker command"
+
+    # Block --privileged flag
+    if "--privileged" in tokens:
+        return False, "docker --privileged is blocked for security"
+
+    # Block dangerous volume mounts
+    dangerous_mounts = ["/", "/etc", "/var", "/root", "/home"]
+    for i, token in enumerate(tokens):
+        if token in ("-v", "--volume") and i + 1 < len(tokens):
+            mount = tokens[i + 1]
+            # Check if mounting a dangerous host path
+            host_path = mount.split(":")[0] if ":" in mount else mount
+            for dangerous in dangerous_mounts:
+                if host_path == dangerous or host_path.startswith(dangerous + "/"):
+                    # Allow if it's clearly a project subdirectory
+                    if "/generations/" in host_path or "/project/" in host_path:
+                        continue
+                    return False, f"Mounting {host_path} is blocked for security"
+
+    # Block --pid=host and --network=host for non-compose
+    if tokens[0] == "docker":
+        if "--pid=host" in tokens:
+            return False, "docker --pid=host is blocked for security"
+
+    return True, ""
+
+
 def get_command_for_validation(cmd: str, segments: list[str]) -> str:
     """
     Find the specific command segment that contains the given command.
@@ -374,6 +496,18 @@ async def bash_security_hook(input_data, tool_use_id=None, context=None):
                     return {"decision": "block", "reason": reason}
             elif cmd == "init.sh":
                 allowed, reason = validate_init_script(cmd_segment)
+                if not allowed:
+                    return {"decision": "block", "reason": reason}
+            elif cmd == "terraform":
+                allowed, reason = validate_terraform_command(cmd_segment)
+                if not allowed:
+                    return {"decision": "block", "reason": reason}
+            elif cmd == "aws":
+                allowed, reason = validate_aws_command(cmd_segment)
+                if not allowed:
+                    return {"decision": "block", "reason": reason}
+            elif cmd in ("docker", "docker-compose"):
+                allowed, reason = validate_docker_command(cmd_segment)
                 if not allowed:
                     return {"decision": "block", "reason": reason}
 

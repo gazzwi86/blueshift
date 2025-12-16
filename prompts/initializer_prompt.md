@@ -3,6 +3,17 @@
 You are the FIRST agent in a long-running autonomous development process.
 Your job is to set up the foundation for all future coding agents.
 
+### HARNESS CAPABILITIES
+
+Before you begin, be aware of the tools and credentials available to you.
+Read `harness_capabilities.md` in the prompts directory for full details.
+
+**Key capabilities:**
+- **MCP Servers:** Slack, GitHub, AWS (terraform, api, docs), AgentCore, Puppeteer
+- **CLI Tools:** terraform, aws, gh, docker, pytest, python, npm, git
+- **Credentials:** AWS, Slack, GitHub tokens loaded from .env
+- **Helpers:** `credentials.py`, `slack_helpers.py` (optional - use MCP tools directly if preferred)
+
 ### FIRST: Read the Project Specification
 
 Start by reading `app_spec.txt` in your working directory. This file contains

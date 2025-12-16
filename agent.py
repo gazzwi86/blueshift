@@ -12,6 +12,7 @@ from typing import Optional
 from claude_code_sdk import ClaudeSDKClient
 
 from client import create_client
+from credentials import get_credentials, print_credential_status, validate_credentials
 from progress import print_session_header, print_progress_summary
 from prompts import get_initializer_prompt, get_coding_prompt, copy_spec_to_project
 
@@ -118,6 +119,17 @@ async def run_autonomous_agent(
         print("Max iterations: Unlimited (will run until completion)")
     print()
 
+    # Load and validate credentials
+    print("Loading credentials...")
+    creds = get_credentials()
+    print_credential_status(creds)
+
+    # Show warnings for missing optional credentials
+    warnings = validate_credentials(creds, require_all=False)
+    for warning in warnings:
+        print(f"  {warning}")
+    print()
+
     # Create project directory
     project_dir.mkdir(parents=True, exist_ok=True)
 
@@ -155,8 +167,8 @@ async def run_autonomous_agent(
         # Print session header
         print_session_header(iteration, is_first_run)
 
-        # Create client (fresh context)
-        client = create_client(project_dir, model)
+        # Create client (fresh context) with credentials
+        client = create_client(project_dir, model, creds)
 
         # Choose prompt based on session type
         if is_first_run:
