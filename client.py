@@ -264,7 +264,7 @@ def create_client(
     return ClaudeSDKClient(
         options=ClaudeCodeOptions(
             model=model,
-            system_prompt="You are an expert full-stack developer building a production-quality web application.",
+            system_prompt="You are an expert software engineer building production-quality software. Follow best practices, write clean code, and ensure comprehensive testing.",
             allowed_tools=[
                 *BUILTIN_TOOLS,
                 *all_mcp_tools,

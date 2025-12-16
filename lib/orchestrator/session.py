@@ -7,14 +7,9 @@ Core agent interaction functions for running autonomous coding sessions.
 
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable, Any
 
 from claude_code_sdk import ClaudeSDKClient
-
-from client import create_client
-from credentials import get_credentials, print_credential_status, validate_credentials
-from progress import print_session_header, print_progress_summary
-from prompts import get_initializer_prompt, get_coding_prompt, copy_spec_to_project
 
 
 # Configuration
@@ -25,6 +20,7 @@ async def run_agent_session(
     client: ClaudeSDKClient,
     message: str,
     project_dir: Path,
+    on_tool_use: Optional[Callable[[str, Any], None]] = None,
 ) -> tuple[str, str]:
     """
     Run a single agent session using Claude Agent SDK.
@@ -33,6 +29,7 @@ async def run_agent_session(
         client: Claude SDK client
         message: The prompt to send
         project_dir: Project directory path
+        on_tool_use: Optional callback for tool use events
 
     Returns:
         (status, response_text) where status is:
@@ -42,10 +39,8 @@ async def run_agent_session(
     print("Sending prompt to Claude Agent SDK...\n")
 
     try:
-        # Send the query
         await client.query(message)
 
-        # Collect response text and show tool use
         response_text = ""
         async for msg in client.receive_response():
             msg_type = type(msg).__name__
@@ -67,6 +62,9 @@ async def run_agent_session(
                             else:
                                 print(f"   Input: {input_str}", flush=True)
 
+                        if on_tool_use:
+                            on_tool_use(block.name, getattr(block, "input", None))
+
             # Handle UserMessage (tool results)
             elif msg_type == "UserMessage" and hasattr(msg, "content"):
                 for block in msg.content:
@@ -76,15 +74,12 @@ async def run_agent_session(
                         result_content = getattr(block, "content", "")
                         is_error = getattr(block, "is_error", False)
 
-                        # Check if command was blocked by security hook
                         if "blocked" in str(result_content).lower():
                             print(f"   [BLOCKED] {result_content}", flush=True)
                         elif is_error:
-                            # Show errors (truncated)
                             error_str = str(result_content)[:500]
                             print(f"   [Error] {error_str}", flush=True)
                         else:
-                            # Tool succeeded - just show brief confirmation
                             print("   [Done]", flush=True)
 
         print("\n" + "-" * 70 + "\n")
@@ -95,10 +90,42 @@ async def run_agent_session(
         return "error", str(e)
 
 
-async def run_autonomous_agent(
+class AgentSession:
+    """
+    Manages a single agent session with context and state.
+    """
+
+    def __init__(
+        self,
+        client: ClaudeSDKClient,
+        project_dir: Path,
+    ):
+        self.client = client
+        self.project_dir = project_dir
+        self.response_text = ""
+        self.tools_used = []
+
+    async def run(self, prompt: str) -> tuple[str, str]:
+        """Run the session with the given prompt."""
+        def track_tool(name: str, input_data: Any):
+            self.tools_used.append({"name": name, "input": input_data})
+
+        return await run_agent_session(
+            self.client,
+            prompt,
+            self.project_dir,
+            on_tool_use=track_tool
+        )
+
+
+async def run_autonomous_loop(
     project_dir: Path,
     model: str,
+    create_client_fn: Callable,
+    get_prompt_fn: Callable[[bool], str],
+    is_first_run: bool,
     max_iterations: Optional[int] = None,
+    on_session_complete: Optional[Callable[[int, str, str], None]] = None,
 ) -> None:
     """
     Run the autonomous agent loop.
@@ -106,113 +133,52 @@ async def run_autonomous_agent(
     Args:
         project_dir: Directory for the project
         model: Claude model to use
-        max_iterations: Maximum number of iterations (None for unlimited)
+        create_client_fn: Function to create a new client
+        get_prompt_fn: Function to get the prompt (takes is_first_run)
+        is_first_run: Whether this is the first run
+        max_iterations: Maximum iterations (None for unlimited)
+        on_session_complete: Optional callback after each session
     """
-    print("\n" + "=" * 70)
-    print("  AUTONOMOUS CODING AGENT DEMO")
-    print("=" * 70)
-    print(f"\nProject directory: {project_dir}")
-    print(f"Model: {model}")
-    if max_iterations:
-        print(f"Max iterations: {max_iterations}")
-    else:
-        print("Max iterations: Unlimited (will run until completion)")
-    print()
-
-    # Load and validate credentials
-    print("Loading credentials...")
-    creds = get_credentials()
-    print_credential_status(creds)
-
-    # Show warnings for missing optional credentials
-    warnings = validate_credentials(creds, require_all=False)
-    for warning in warnings:
-        print(f"  {warning}")
-    print()
-
-    # Create project directory
-    project_dir.mkdir(parents=True, exist_ok=True)
-
-    # Check if this is a fresh start or continuation
-    tests_file = project_dir / "feature_list.json"
-    is_first_run = not tests_file.exists()
-
-    if is_first_run:
-        print("Fresh start - will use initializer agent")
-        print()
-        print("=" * 70)
-        print("  NOTE: First session takes 10-20+ minutes!")
-        print("  The agent is generating 200 detailed test cases.")
-        print("  This may appear to hang - it's working. Watch for [Tool: ...] output.")
-        print("=" * 70)
-        print()
-        # Copy the app spec into the project directory for the agent to read
-        copy_spec_to_project(project_dir)
-    else:
-        print("Continuing existing project")
-        print_progress_summary(project_dir)
-
-    # Main loop
     iteration = 0
 
     while True:
         iteration += 1
 
-        # Check max iterations
         if max_iterations and iteration > max_iterations:
             print(f"\nReached max iterations ({max_iterations})")
-            print("To continue, run the script again without --max-iterations")
             break
 
         # Print session header
-        print_session_header(iteration, is_first_run)
+        session_type = "INITIALIZER" if is_first_run else "CODING AGENT"
+        print("\n" + "=" * 70)
+        print(f"  SESSION {iteration}: {session_type}")
+        print("=" * 70 + "\n")
 
-        # Create client (fresh context) with credentials
-        client = create_client(project_dir, model, creds)
+        # Create fresh client
+        client = create_client_fn(project_dir, model)
 
-        # Choose prompt based on session type
-        if is_first_run:
-            prompt = get_initializer_prompt()
-            is_first_run = False  # Only use initializer once
-        else:
-            prompt = get_coding_prompt()
+        # Get prompt
+        prompt = get_prompt_fn(is_first_run)
+        is_first_run = False  # Only use initializer once
 
-        # Run session with async context manager
+        # Run session
         async with client:
             status, response = await run_agent_session(client, prompt, project_dir)
 
-        # Handle status
+        if on_session_complete:
+            on_session_complete(iteration, status, response)
+
         if status == "continue":
             print(f"\nAgent will auto-continue in {AUTO_CONTINUE_DELAY_SECONDS}s...")
-            print_progress_summary(project_dir)
             await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
-
         elif status == "error":
-            print("\nSession encountered an error")
-            print("Will retry with a fresh session...")
+            print("\nSession encountered an error, will retry...")
             await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
 
-        # Small delay between sessions
         if max_iterations is None or iteration < max_iterations:
             print("\nPreparing next session...\n")
             await asyncio.sleep(1)
 
-    # Final summary
     print("\n" + "=" * 70)
     print("  SESSION COMPLETE")
     print("=" * 70)
-    print(f"\nProject directory: {project_dir}")
-    print_progress_summary(project_dir)
-
-    # Print instructions for running the generated application
-    print("\n" + "-" * 70)
-    print("  TO RUN THE GENERATED APPLICATION:")
-    print("-" * 70)
-    print(f"\n  cd {project_dir.resolve()}")
-    print("  ./init.sh           # Run the setup script")
-    print("  # Or manually:")
-    print("  npm install && npm run dev")
-    print("\n  Then open http://localhost:3000 (or check init.sh for the URL)")
-    print("-" * 70)
-
-    print("\nDone!")

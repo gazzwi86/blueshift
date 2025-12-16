@@ -4,158 +4,159 @@ This document describes the tools, credentials, and capabilities available to yo
 
 ---
 
+## Architecture Overview
+
+This harness is designed for building **AI agents with cloud infrastructure**, not web applications.
+
+**Key differences from web app development:**
+- Testing via **agent evaluation** (LLM-as-judge) not browser automation
+- Infrastructure validated via **Terraform** and AWS CLI
+- Progress tracked via **evaluation scores** meeting thresholds
+- **Human-in-the-loop (HITL)** checkpoints at critical junctures
+
+---
+
 ## Credential Scopes
 
 There are **two credential scopes**:
 
 1. **Harness Credentials** - For running the autonomous agent harness itself
-2. **Runtime Credentials** - For the PixieOps agent when deployed to AgentCore
+2. **Runtime Credentials** - For the deployed agent when running in production
 
 All credentials are loaded from the `.env` file in the project root.
 
 ---
 
-## Harness Credentials
+## Required Credentials (Validated at Startup)
 
-These are for the harness that orchestrates your work.
+The harness validates these at startup and **fails fast** if missing:
 
 ### AWS
 - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` - Direct access keys
 - OR `AWS_PROFILE` - Named profile for SSO/assumed roles
 - `AWS_REGION` - Default region (ap-southeast-2)
-- **Load with:** Environment variables are already set, or use `from credentials import get_credentials`
 
-### Slack
+### Snowflake
+- `SNOWFLAKE_ACCOUNT` - Account identifier
+- `SNOWFLAKE_USER` - Service account username
+- `SNOWFLAKE_PASSWORD` - Password
+- `SNOWFLAKE_WAREHOUSE` - Compute warehouse
+- `SNOWFLAKE_DATABASE` - Database name
+- `SNOWFLAKE_SCHEMA` - Schema name
+
+### SharePoint
+- `SHAREPOINT_CLIENT_ID` - Azure AD app client ID
+- `SHAREPOINT_CLIENT_SECRET` - Client secret
+- `SHAREPOINT_TENANT_ID` - Azure AD tenant
+- `SHAREPOINT_SITE_URL` - SharePoint site URL
+
+---
+
+## Optional Credentials (Added via HITL)
+
+These are added later when the agent reaches the Slack integration phase:
+
+### Slack (Added via HITL checkpoint)
 - `SLACK_BOT_TOKEN` - Bot user OAuth token (xoxb-...)
 - `SLACK_APP_TOKEN` - App-level token for Socket Mode (xapp-...)
-- **Load with:** Already available to Slack MCP server
-
-### GitHub
-- `GITHUB_TOKEN` - Personal access token (ghp_...)
-- **Load with:** Already available to GitHub MCP server
-
-### Anthropic
-- `ANTHROPIC_API_KEY` - Already configured for this agent
 
 ---
 
-## External Service Credentials (User Provided)
+## Library Components (lib/)
 
-These connect to services that exist **outside AWS** and must be provided in `.env`.
+The harness provides reusable library components:
 
-### Snowflake Data Warehouse
-Source of truth for employee roles, practices, allocations, absences.
-```
-SNOWFLAKE_ACCOUNT=your-account.ap-southeast-2.aws
-SNOWFLAKE_USER=pixieops_service
-SNOWFLAKE_PASSWORD=...
-SNOWFLAKE_WAREHOUSE=PIXIEOPS_WH
-SNOWFLAKE_DATABASE=WORKFORCE
-SNOWFLAKE_SCHEMA=PUBLIC
-```
-**Production:** Store in `pixieops/snowflake-credentials` (Secrets Manager)
-
-### SharePoint (Bio Source)
-Employee bio documents to be extracted.
-```
-SHAREPOINT_CLIENT_ID=...
-SHAREPOINT_CLIENT_SECRET=...
-SHAREPOINT_TENANT_ID=...
-SHAREPOINT_SITE_URL=https://yourorg.sharepoint.com/sites/EmployeeBios
-```
-**Production:** Store in `pixieops/sharepoint-credentials` (Secrets Manager)
-
----
-
-## Infrastructure Outputs (Created by Terraform)
-
-These are **NOT** user-provided credentials. The agent creates this infrastructure via Terraform and the IDs are outputs.
-
-| Resource | Created By | Output Variable |
-|----------|-----------|-----------------|
-| Bedrock Knowledge Base | `modules/bedrock-kb` | `bedrock_kb_id` |
-| Bedrock Guardrails | `modules/guardrails` | `bedrock_guardrail_id` |
-| S3 Vectors Bucket | `modules/s3-vectors` | `s3_vectors_bucket` |
-| S3 Raw Docs Bucket | `modules/storage` | `s3_raw_docs_bucket` |
-| AgentCore Runtime | `modules/agentcore-runtime` | `agentcore_agent_id` |
-
-### Loading Infrastructure Outputs
+### lib/hitl.py - Human-in-the-Loop System
 ```python
-from credentials import load_infrastructure_outputs, print_infrastructure_status
-from pathlib import Path
+from lib.hitl import checkpoint, require_approval
 
-# Option 1: From Terraform state
-infra = load_infrastructure_outputs(terraform_dir=Path("infra/environments/dev"))
-
-# Option 2: From saved config file (after terraform apply)
-infra = load_infrastructure_outputs(config_file=Path("generated_config.json"))
-
-print_infrastructure_status(infra)
-
-# Access values
-infra.bedrock_kb_id
-infra.s3_vectors_bucket
-
-# Check deployment status
-if infra.is_deployed():
-    print("Infrastructure ready!")
-```
-
-### Saving Infrastructure Outputs
-After `terraform apply`, save outputs for later use:
-```python
-from credentials import save_infrastructure_outputs
-
-save_infrastructure_outputs(infra, Path("generated_config.json"))
-```
-
----
-
-## Model Configuration (Constants)
-
-These are model IDs - not credentials. They're hardcoded in `credentials.py`:
-```python
-runtime.models.agent_model_id        # Claude Sonnet 4.5
-runtime.models.classifier_model_id   # Claude Haiku 3.0
-runtime.models.verification_model_id # Claude 3.5 Sonnet
-runtime.models.embedding_model_id    # Titan Text V2
-```
-
----
-
-## Loading Credentials
-```python
-from credentials import (
-    get_runtime_credentials,
-    load_infrastructure_outputs,
-    print_runtime_credential_status,
-    print_infrastructure_status,
+# Interactive checkpoint - waits for human decision
+response = checkpoint(
+    name="initializer_complete",
+    description="Review generated test fixtures",
+    artifacts=["feature_list.json", "fixtures/"],
+    review_instructions=["Are test cases comprehensive?"]
 )
-from pathlib import Path
 
-# Load external service credentials from .env
-runtime = get_runtime_credentials()
-print_runtime_credential_status(runtime)
+if response.approved:
+    if response.has_feedback:
+        apply_amendments(response.feedback)
+    continue_execution()
+else:
+    halt_with_reason(response.denial_reason)
+```
 
-# Load infrastructure outputs from Terraform
-runtime.infra = load_infrastructure_outputs(
-    terraform_dir=Path("infra/environments/dev")
+**HITL Decision Types:**
+- `[A] Approve` - Continue execution immediately
+- `[D] Deny` - Halt execution with reason
+- `[M] Amend` - Continue with feedback for agent to address
+
+### lib/evaluation/ - Agent Evaluation Framework
+```python
+from lib.evaluation import EvaluationHarness
+
+harness = EvaluationHarness(use_deepeval=True)
+result = harness.evaluate(
+    query="Find AWS certified architects",
+    response=agent_response,
+    expected={
+        "intent_types": ["certification", "role"],
+        "tools_used": ["search_employees_comprehensive"]
+    },
+    thresholds={"correctness": 0.7, "helpfulness": 0.7}
 )
-print_infrastructure_status(runtime.infra)
 
-# Check overall readiness
-if runtime.is_production_ready():
-    print("All systems go!")
+if result.passed:
+    mark_test_as_passing()
+```
+
+**Evaluation Metrics:**
+- `correctness` - Is the response factually correct?
+- `helpfulness` - Is it useful and actionable?
+- `tool_selection` - Did the agent use the right tools?
+- `safety` - Did it refuse off-topic queries?
+
+### lib/infrastructure/ - Terraform & AWS Validation
+```python
+from lib.infrastructure import TerraformValidator, AWSResourceChecker
+
+# Terraform operations
+tf = TerraformValidator(working_dir="infra/environments/dev")
+tf.init()
+tf.plan()
+tf.apply(auto_approve=True)  # Full autonomy for dev
+
+# AWS resource verification
+aws = AWSResourceChecker()
+result = aws.verify_s3_bucket("my-bucket", encryption="aws:kms")
+if result.passed:
+    print("Bucket configured correctly")
+```
+
+### lib/credentials/ - Credential Validation
+```python
+from lib.credentials import CredentialValidator
+
+validator = CredentialValidator()
+validator.require_aws()
+validator.require_snowflake()
+validator.require_sharepoint()
+validator.require_slack(required=False)  # Optional
+
+result = validator.validate()
+if not result.valid:
+    result.print_status()
+    exit(1)
 ```
 
 ---
 
 ## MCP Servers Available
 
-You have access to these MCP servers. Use their tools via the `mcp__<server>__<tool>` naming convention.
+You have access to these MCP servers via the `mcp__<server>__<tool>` convention:
 
-### Browser Automation
-- **puppeteer** - Browser automation for testing
+### Browser Automation (Limited use for AI agents)
+- **puppeteer** - Only for visual testing if needed
   - Navigate, click, fill, screenshot, evaluate
 
 ### Communication
@@ -215,77 +216,129 @@ ps|lsof|sleep|pkill <dev-process>
 
 ---
 
-## Optional Python Helpers
+## Testing Approach
 
-These helpers are available but you can also use MCP tools directly.
+### Agent Evaluation Tests
+```bash
+# Run all evaluation tests
+pytest tests/test_intent.py tests/test_responses.py -v
 
-### credentials.py
-```python
-# Harness credentials
-from credentials import get_credentials, print_credential_status
+# Run with DeepEval metrics
+pytest tests/test_responses.py --deepeval -v
 
-creds = get_credentials()
-print_credential_status(creds)
-
-creds.aws_access_key_id
-creds.slack_bot_token
-creds.github_token
-
-# Runtime credentials
-from credentials import get_runtime_credentials, print_runtime_credential_status
-
-runtime = get_runtime_credentials()
-print_runtime_credential_status(runtime)
-
-runtime.snowflake.account
-runtime.bedrock.kb_id
+# Check specific category
+pytest tests/ -k "guardrails" -v
 ```
 
-### slack_helpers.py
-```python
-from slack_helpers import send_message, get_channel_history
+### Infrastructure Tests
+```bash
+# Validate Terraform can plan
+cd infra/environments/dev && terraform plan
 
-# Send a message
-send_message("#general", "Deployment complete!")
+# Apply with auto-approve (dev only)
+terraform apply -auto-approve
 
-# Get recent messages
-messages = get_channel_history("C1234567890", limit=10)
+# Verify resources
+pytest tests/test_infrastructure.py -v
 ```
+
+### Mock Services
+```bash
+# Start mock server for local testing
+python -m mocks.server &
+
+# Run tests with mocks
+MOCK_SERVICES=true pytest tests/ -v
+```
+
+---
+
+## HITL Checkpoints
+
+The agent will pause at these points:
+
+### After Initializer
+- Review generated feature_list.json
+- Review synthetic test fixtures
+- Approve project structure
+
+### Before Slack Integration
+- Configure Slack App in web console
+- Add tokens to .env
+- Approve to continue
+
+### Before Production (if applicable)
+- Review all passing tests
+- Approve production deployment
+
+---
+
+## Environment Autonomy
+
+### Development Environment
+- **Full autonomy** - terraform apply -auto-approve
+- All dev resources can be created/destroyed
+- No HITL required for infrastructure changes
+
+### Production Environment
+- **Not in scope** - Agent halts at dev-complete
+- Production requires manual deployment
+
+---
+
+## Feature List Format
+
+Tests are defined in `feature_list.json` with evaluation thresholds:
+
+```json
+{
+  "category": "response_quality",
+  "test_type": "agent_evaluation",
+  "query": "Find Python developers with healthcare experience",
+  "expected": {
+    "response_format": "slack_markdown",
+    "contains_elements": ["employee names", "skills"],
+    "tools_used": ["search_employees_comprehensive"]
+  },
+  "evaluation_thresholds": {
+    "helpfulness": 0.7,
+    "correctness": 0.7
+  },
+  "passes": false
+}
+```
+
+**Categories:**
+1. `credential_validation` - Startup checks
+2. `infrastructure` - Terraform/AWS resources
+3. `intent_classification` - Query understanding
+4. `tool_selection` - Correct tool usage
+5. `response_quality` - Response content/format
+6. `guardrails` - Safety/refusal behavior
+7. `error_handling` - Graceful degradation
+8. `integration` - End-to-end flows
 
 ---
 
 ## What You Are Expected To Do
 
-As an autonomous agent running for up to 24 hours:
+As an autonomous agent:
 
-1. **Create your own testing framework** - Design tests that fit your project
-2. **Create your own Terraform infrastructure** - Build infra in `infra/` as needed
-3. **Build your own Slack interaction patterns** - Use MCP or helpers as you prefer
-4. **Manage your own deployment verification** - Test deployments end-to-end
-5. **Port from ECS to AgentCore** - Using the PixieOps spec as guidance
-6. **Configure AWS Secrets Manager** - Store runtime credentials securely
-
-The harness provides capabilities; you decide how to use them.
-
----
-
-## AWS Secrets Manager Paths (Production)
-
-In production, credentials should be stored in AWS Secrets Manager:
-
-| Secret Path | Contents |
-|-------------|----------|
-| `pixieops/slack-tokens` | SLACK_BOT_TOKEN, SLACK_APP_TOKEN |
-| `pixieops/snowflake-credentials` | account, user, password, warehouse, database, schema |
-| `pixieops/sharepoint-credentials` | client_id, client_secret, tenant_id, site_url |
+1. **Validate credentials at startup** - Fail fast if missing
+2. **Generate comprehensive test fixtures** - Synthetic but realistic data
+3. **Create Terraform infrastructure** - Modules in `infra/`
+4. **Implement agent code** - In `src/` following the spec
+5. **Evaluate with scoring thresholds** - Not just pass/fail
+6. **Handle HITL checkpoints** - Pause and wait for approval
+7. **Track progress** - Update claude-progress.txt and feature_list.json
 
 ---
 
 ## Security Notes
 
-- All bash commands are validated against an allowlist
-- Destructive AWS IAM/account operations are blocked
-- Docker `--privileged` mode is blocked
-- Terraform destroy is allowed (for infrastructure management)
-- File operations are sandboxed to the project directory
-- In production, use AWS Secrets Manager instead of .env files
+- All bash commands validated against an allowlist
+- Destructive AWS IAM/account operations blocked
+- Docker `--privileged` mode blocked
+- Terraform destroy allowed (for dev cleanup)
+- File operations sandboxed to project directory
+- Credentials never logged or committed

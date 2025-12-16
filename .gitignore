@@ -12,6 +12,7 @@ logs/
 .env
 .env.local
 .env.*.local
+secrets/
 
 # Terraform state (contains secrets)
 *.tfstate

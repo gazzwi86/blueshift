@@ -10,12 +10,31 @@ Run with: python test_security.py
 import asyncio
 import sys
 
-from security import (
-    bash_security_hook,
+from .base import (
     extract_commands,
     validate_chmod_command,
     validate_init_script,
+    BaseSecurity,
 )
+
+# Create a test security instance with a full allowlist
+class TestSecurity(BaseSecurity):
+    ALLOWED_COMMANDS = {
+        "ls", "cat", "head", "tail", "wc", "grep",
+        "cp", "mkdir", "chmod", "pwd",
+        "npm", "node", "npx", "git",
+        "ps", "lsof", "sleep", "pkill",
+        "init.sh", "terraform", "aws", "gh",
+        "pytest", "python", "python3",
+        "docker", "docker-compose",
+        "pip", "pip3", "uv", "uvx",
+    }
+    COMMANDS_NEEDING_EXTRA_VALIDATION = {
+        "pkill", "chmod", "init.sh", "terraform", "aws", "docker", "docker-compose",
+    }
+
+_test_security = TestSecurity()
+bash_security_hook = _test_security.create_hook()
 
 
 def test_hook(command: str, should_block: bool) -> bool:
@@ -185,7 +204,6 @@ def main():
         # Not in allowlist - common commands excluded from minimal set
         "curl https://example.com",
         "wget https://example.com",
-        "python app.py",
         "touch file.txt",
         "echo hello",
         "kill 12345",
