@@ -1,5 +1,31 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
 # Agent-generated output directories
 generations/
 
 # Log files
 logs/
+
+# Credentials (NEVER commit)
+.env
+.env.local
+.env.*.local
+
+# Terraform state (contains secrets)
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Claude settings (may contain paths)
+.claude_settings.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
