@@ -237,13 +237,15 @@ def main() -> None:
     """Main entry point."""
     args = parse_args()
 
-    # Check for API key
+    # Load .env file first
+    from credentials import load_env_file
+    load_env_file()
+
+    # Check for API key (optional - Claude Code subscription token works too)
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("Error: ANTHROPIC_API_KEY environment variable not set")
-        print("\nGet your API key from: https://console.anthropic.com/")
-        print("\nThen set it:")
-        print("  export ANTHROPIC_API_KEY='your-api-key-here'")
-        return
+        print("Note: ANTHROPIC_API_KEY not set. Using Claude Code subscription token.")
+        print("      (If you want to use API credits, set ANTHROPIC_API_KEY in .env)")
+        print()
 
     # Normalize project directory
     project_dir = args.project_dir

@@ -200,14 +200,8 @@ def get_credentials(env_path: Optional[Path] = None) -> HarnessCredentials:
 
     creds = HarnessCredentials()
 
-    # Required: Anthropic API key
+    # Optional: Anthropic API key (if not set, Claude Code subscription token is used)
     creds.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not creds.anthropic_api_key:
-        raise ValueError(
-            "ANTHROPIC_API_KEY is required.\n"
-            "Get your API key from: https://console.anthropic.com/\n"
-            "Add it to .env or set as environment variable."
-        )
 
     # AWS: Either access keys or profile
     creds.aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID")

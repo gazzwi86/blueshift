@@ -33,16 +33,43 @@ uv sync
 
 # Copy environment template and configure
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env with your credentials (see Configuration below)
 ```
+
+### Authentication
+
+You have two options for authenticating with Claude:
+
+**Option 1: Claude Code Subscription (Recommended)**
+
+Use your existing Claude Code subscription - no additional API costs:
+
+```bash
+# Set up a long-lived token for your Claude Code subscription
+claude setup-token
+
+# Follow the prompts to authenticate
+# The token is stored locally and used automatically
+```
+
+**Option 2: Anthropic API Key**
+
+Use direct API access (billed separately):
+
+```bash
+# Add to your .env file
+ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
+```
+
+Get your API key from: https://console.anthropic.com/
 
 ### Configuration
 
 Edit `.env` with your credentials:
 
 ```bash
-# Required
-ANTHROPIC_API_KEY=sk-ant-...
+# Authentication (optional if using Claude Code subscription token)
+# ANTHROPIC_API_KEY=sk-ant-...
 
 # Optional (for MCP servers)
 AWS_PROFILE=your-profile

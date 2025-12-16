@@ -196,12 +196,9 @@ def create_client(
     3. Security hooks - Bash commands validated against an allowlist
        (see security.py for ALLOWED_COMMANDS)
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise ValueError(
-            "ANTHROPIC_API_KEY environment variable not set.\n"
-            "Get your API key from: https://console.anthropic.com/"
-        )
+    # Note: ANTHROPIC_API_KEY is optional. If not set, the Claude Code SDK
+    # will use the Claude Code subscription token (set via `claude setup-token`).
+    # If ANTHROPIC_API_KEY is set, it will be used for direct API access instead.
 
     # Build MCP server configuration
     mcp_servers = build_mcp_servers(creds)
