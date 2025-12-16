@@ -56,9 +56,8 @@ GITHUB_TOOLS = [
     "mcp__github__list_branches",
 ]
 
-# AWS MCP tools (generic pattern - actual tools depend on server)
+# AWS MCP tools (wildcard patterns for dynamic tool discovery)
 AWS_MCP_TOOLS = [
-    # These are patterns - actual tool names vary by MCP server
     "mcp__agentcore__*",
     "mcp__aws-terraform__*",
     "mcp__aws-api__*",
@@ -68,7 +67,8 @@ AWS_MCP_TOOLS = [
     "mcp__context7__*",
 ]
 
-# Built-in tools
+# Built-in tools - explicitly NO WebSearch to prevent runtime research
+# All research should be completed before agent starts (in app_spec.txt)
 BUILTIN_TOOLS = [
     "Read",
     "Write",
@@ -76,6 +76,8 @@ BUILTIN_TOOLS = [
     "Glob",
     "Grep",
     "Bash",
+    # WebSearch intentionally excluded - research belongs in app_spec.txt
+    # Task/Agent tools are managed by Claude Code itself
 ]
 
 
@@ -265,6 +267,7 @@ def create_client(
             allowed_tools=[
                 *BUILTIN_TOOLS,
                 *all_mcp_tools,
+                *AWS_MCP_TOOLS,  # Wildcard patterns for AWS/infrastructure MCP servers
             ],
             mcp_servers=mcp_servers,
             hooks={

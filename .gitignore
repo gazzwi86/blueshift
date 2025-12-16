@@ -33,3 +33,7 @@ __pycache__/
 .venv/
 venv/
 
+hitl_history.json
+
+# Project-specific context (contains app specs, not part of harness)
+project_context/

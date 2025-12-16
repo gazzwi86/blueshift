@@ -14,6 +14,8 @@ import argparse
 import sys
 from pathlib import Path
 
+from lib.validation import AppSpecValidator
+
 
 class PreflightChecker:
     """Runs preflight checks and reports results."""
@@ -52,6 +54,7 @@ class PreflightChecker:
             ("lib.evaluation", ["EvaluationHarness"]),
             ("lib.infrastructure", ["TerraformValidator", "AWSResourceChecker"]),
             ("lib.orchestrator", ["run_agent_session"]),
+            ("lib.validation", ["AppSpecValidator", "ValidationResult"]),
         ]
 
         for module_name, exports in modules:
@@ -100,13 +103,13 @@ class PreflightChecker:
 
             creds = get_credentials()
 
-            # Required
+            # Optional - Claude Code subscription token works as fallback
             if creds.anthropic_api_key:
                 # Show partial key for verification
                 key_preview = creds.anthropic_api_key[:12] + "..."
                 self.ok(f"ANTHROPIC_API_KEY ({key_preview})")
             else:
-                self.fail("ANTHROPIC_API_KEY not set")
+                self.warn("ANTHROPIC_API_KEY not set (using Claude Code subscription token)")
 
             # AWS
             if creds.has_aws_profile():
@@ -141,20 +144,73 @@ class PreflightChecker:
         """Check that prompt files exist."""
         self.section("Prompt Files")
 
-        prompts_dir = Path(__file__).parent / "prompts"
-        required_prompts = [
+        # Generic prompts in lib/prompts/
+        generic_prompts_dir = Path(__file__).parent / "lib" / "prompts"
+        generic_prompts = [
             "initializer_prompt.md",
             "coding_prompt.md",
-            "app_spec.txt",
         ]
 
-        for prompt_file in required_prompts:
-            path = prompts_dir / prompt_file
+        for prompt_file in generic_prompts:
+            path = generic_prompts_dir / prompt_file
             if path.exists():
                 size = path.stat().st_size
                 self.ok(f"{prompt_file} ({size} bytes)")
             else:
-                self.fail(f"{prompt_file} not found")
+                self.fail(f"{prompt_file} not found in lib/prompts/")
+
+        # Project-specific context in project_context/
+        project_context_dir = Path(__file__).parent / "project_context"
+        project_files = [
+            "app_spec.txt",
+            "harness_capabilities.md",
+            "workflow_template.md",
+            "stage_gates.md",
+        ]
+
+        for context_file in project_files:
+            path = project_context_dir / context_file
+            if path.exists():
+                size = path.stat().st_size
+                self.ok(f"{context_file} ({size} bytes)")
+            else:
+                self.fail(f"{context_file} not found in project_context/")
+
+        # Optional project additions
+        optional_files = ["init_additions.md", "coding_additions.md"]
+        for opt_file in optional_files:
+            path = project_context_dir / opt_file
+            if path.exists():
+                size = path.stat().st_size
+                self.ok(f"{opt_file} (optional, {size} bytes)")
+
+    def check_app_spec(self) -> None:
+        """Validate app_spec.txt has all required sections with sufficient detail."""
+        self.section("App Specification Validation")
+
+        project_context_dir = Path(__file__).parent / "project_context"
+        app_spec_path = project_context_dir / "app_spec.txt"
+
+        if not app_spec_path.exists():
+            self.fail("app_spec.txt not found in project_context/")
+            return
+
+        validator = AppSpecValidator(app_spec_path)
+        result = validator.validate()
+
+        if result.valid:
+            self.ok("All required sections present with sufficient detail")
+            for section in result.sections:
+                if section.passed:
+                    print(f"       - {section.name} ({section.char_count} chars)")
+        else:
+            self.fail("App specification incomplete - agent cannot start")
+            for error in result.errors:
+                print(f"       - {error}")
+
+        # Show warnings for optional sections
+        for warning in result.warnings:
+            self.warn(warning)
 
     def check_security_tests(self) -> None:
         """Run the security test suite."""
@@ -220,6 +276,7 @@ class PreflightChecker:
         self.check_project_imports()
         self.check_credentials()
         self.check_prompts()
+        self.check_app_spec()
         self.check_claude_sdk()
 
         if not skip_security_tests:
