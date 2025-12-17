@@ -187,6 +187,109 @@ based on the project's technology stack and best practices.
 Tests are NEVER removed, only marked as passing. This prevents declaring the project
 complete prematurely.
 
+### ⚠️ MANDATORY: COMPLETE FEATURE LIST REQUIRED
+
+**YOU MUST GENERATE ALL FEATURES.** This is NON-NEGOTIABLE.
+
+- **DO NOT** create a "representative sample" or "template"
+- **DO NOT** stop at 10-50 features and say "extend as needed"
+- **DO NOT** cite token limits, context length, or file size as reasons to skip features
+- **YOU MUST** generate the COMPLETE feature list with 200+ features
+
+**If the JSON file would be too large to write in one go, use this strategy:**
+
+1. Create a Python script `generate_features.py` that programmatically generates ALL features
+2. Organize features into categories matching app_spec.txt sections
+3. Run the script to generate the complete `feature_list.json`
+4. Verify the generated file has 200+ features before proceeding
+
+**Example generation approach:**
+
+```python
+#!/usr/bin/env python3
+"""Generate complete feature_list.json - ALL features, not a sample."""
+import json
+
+features = []
+feat_id = 0
+
+def add_feature(category, title, desc, business_value, acceptance_criteria,
+                test_types, fixtures, mocks, assertions, deps, source):
+    global feat_id
+    feat_id += 1
+    features.append({
+        "id": f"feat_{feat_id:03d}",
+        "category": category,
+        "title": title,
+        "description": desc,
+        "business_value": business_value,
+        "acceptance_criteria": [
+            {"id": f"ac_{feat_id:03d}_{i+1:03d}", "given": g, "when": w, "then": t}
+            for i, (g, w, t) in enumerate(acceptance_criteria)
+        ],
+        "test_approach": {
+            "test_types": test_types,
+            "fixtures": fixtures,
+            "mocks": mocks,
+            "assertions": assertions
+        },
+        "dependencies": deps,
+        "dor_checklist": {
+            "clear_description": True, "acceptance_criteria": True,
+            "test_approach": True, "dependencies_resolved": len(deps.get("features", [])) == 0,
+            "tech_aligned": True
+        },
+        "dod_checklist": {
+            "code_complete": False, "unit_tests_pass": False,
+            "coverage_threshold_met": False, "integration_tests_pass": False,
+            "deployed": False, "smoke_tests_pass": False
+        },
+        "source": source,
+        "passes": False
+    })
+
+# ============================================================
+# TECH STACK FEATURES (15+ features)
+# Extract from app_spec.txt <technology_stack> section
+# ============================================================
+add_feature("tech_stack", "Agent uses correct framework", "...", "...",
+            [("Code exists", "Inspected", "Uses specified framework")], ...)
+
+# ... generate ALL 15+ tech_stack features ...
+
+# ============================================================
+# TEST SETUP FEATURES (12+ features)
+# ============================================================
+# ... generate ALL test_setup features ...
+
+# ============================================================
+# Continue for ALL categories from app_spec.txt
+# ============================================================
+
+# Save with validation
+output = {
+    "project": "Project Name",
+    "generated_by": "initializer_agent",
+    "total_features": len(features),
+    "features": features
+}
+
+# VALIDATION: Ensure we have enough features
+assert len(features) >= 200, f"ERROR: Only {len(features)} features! Need 200+"
+
+with open("feature_list.json", "w") as f:
+    json.dump(output, f, indent=2)
+
+print(f"Generated {len(features)} features")
+```
+
+**After running the script, verify:**
+```bash
+python3 -c "import json; d=json.load(open('feature_list.json')); print(f'Features: {len(d[\"features\"])}')"
+```
+
+The output MUST show 200+ features. If not, keep adding features until it does.
+
 ### Quality Framework Integration
 
 Read `quality_framework.md` in the project context for the full schema. Each feature MUST include:
@@ -207,7 +310,7 @@ Features should be:
 - **S**mall - Completable in 1-3 sessions
 - **T**estable - Has measurable success criteria
 
-**Minimum 200 features** covering all aspects of the project specification.
+**REQUIRED: Minimum 200 features covering ALL aspects of app_spec.txt.**
 
 ### Enhanced Feature Schema
 
@@ -271,6 +374,37 @@ Read the `<technology_stack>` and other sections in app_spec.txt to determine:
 2. What infrastructure needs deployment (creates `infrastructure` tests)
 3. What core behaviors need testing (creates behavior tests)
 4. What integrations need verification (creates `integration` tests)
+
+### Required Feature Categories (extract ALL from app_spec.txt)
+
+**You MUST create features for EVERY section in app_spec.txt.** Example breakdown:
+
+| Category | Min Features | Source in app_spec.txt |
+|----------|-------------|------------------------|
+| tech_stack | 15+ | `<technology_stack>`, `<agent_runtime>`, `<ai_models>` |
+| test_setup | 12+ | `<testing_strategy>`, test framework setup |
+| credential_validation | 10+ | `<security>`, `<secrets_manager>`, credentials needed |
+| infrastructure | 25+ | `<infrastructure>`, `<terraform_structure>`, AWS resources |
+| deployment | 15+ | `<cicd_pipeline>`, `<implementation_phases>`, terraform apply |
+| intent_classification | 20+ | `<intent_classification_schema>`, `<intent_types>` |
+| knowledge_base_retrieval | 25+ | `<knowledge_base_retrieval>`, `<retrieval_process>` |
+| snowflake_integration | 20+ | `<data_sources>`, `<data_schema>`, `<snowflake_tables>` |
+| cross_reference | 15+ | `<data_source_precedence>`, `<cross_reference_scenarios>` |
+| utilization_forecasting | 15+ | `<utilization_forecasting>`, `<utilization_buckets>` |
+| response_formatting | 15+ | `<response_formatting>`, `<slack_syntax>` |
+| slack_integration | 15+ | `<slack_integration>`, events, thread context |
+| guardrails_security | 20+ | `<guardrails_and_safety>`, `<bedrock_guardrails_config>` |
+| error_handling | 15+ | `<error_handling>`, all failure scenarios |
+| evaluation | 8+ | `<evaluation_test_cases>`, success metrics |
+
+**TOTAL: 230+ features minimum**
+
+For each category, create features covering:
+- Happy path scenarios
+- Edge cases
+- Error scenarios
+- Configuration validation
+- Integration points
 
 ### Category: tech_stack (10+ tests)
 
@@ -713,7 +847,23 @@ Generated from app_spec.txt by the initializer agent.
 
 ## TASK 8: Create HITL Checkpoint
 
-After completing the above tasks, create a checkpoint for human review.
+**BEFORE creating the checkpoint, VALIDATE your work:**
+
+```bash
+# 1. Verify feature count - MUST be 200+
+python3 -c "import json; d=json.load(open('feature_list.json')); n=len(d['features']); print(f'Feature count: {n}'); assert n >= 200, f'FAILED: Only {n} features, need 200+'"
+
+# 2. If the above fails, GO BACK and add more features
+# DO NOT proceed to HITL checkpoint until you have 200+ features
+```
+
+**If feature count < 200:**
+- Review app_spec.txt again for missed features
+- Add features for EVERY section: evaluation_test_cases, error_handling, guardrails_and_safety, etc.
+- Re-run the generator script with more features
+- Repeat until validation passes
+
+**Only after validation passes**, create a checkpoint for human review.
 
 Write `HITL_CHECKPOINT.md`:
 
@@ -724,9 +874,14 @@ Write `HITL_CHECKPOINT.md`:
 
 The initializer agent has completed the following:
 
+### Feature Count Validation
+**Total features generated: [INSERT ACTUAL COUNT]**
+- Required minimum: 200 features
+- Validation status: ✅ PASSED / ❌ FAILED
+
 ### Generated Artifacts
 - [ ] `testing_strategy.md` - Testing approach based on tech stack research
-- [ ] `feature_list.json` - Evaluation test cases (informed by testing strategy)
+- [ ] `feature_list.json` - Evaluation test cases ([INSERT COUNT] features)
 - [ ] `workflow_phases.md` - Development phases for this project
 - [ ] `fixtures/` - Synthetic test data for mocking
 - [ ] `init.sh` - Environment setup script
