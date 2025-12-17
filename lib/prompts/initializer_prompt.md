@@ -187,16 +187,82 @@ based on the project's technology stack and best practices.
 Tests are NEVER removed, only marked as passing. This prevents declaring the project
 complete prematurely.
 
-**Now that you have a testing strategy**, create a comprehensive feature list with
-evaluation test cases organized by category.
+### Quality Framework Integration
 
-Use the testing strategy to inform:
-- Which test categories to include
-- What testing frameworks/tools to reference
-- CI/CD test stages needed
-- Test boilerplate setup tasks
+Read `quality_framework.md` in the project context for the full schema. Each feature MUST include:
+
+1. **Definition of Ready (DoR)** checklist - Is the feature ready to implement?
+2. **Acceptance Criteria** - Specific, testable criteria (Given/When/Then format)
+3. **Test Approach** - What types of tests, fixtures, mocks, and assertions
+4. **Dependencies** - What must be done first
+5. **Definition of Done (DoD)** checklist - How do we know it's complete?
+
+### INVEST Principles
+
+Features should be:
+- **I**ndependent - Can be built without blocking on others
+- **N**egotiable - Defines "what" not "how"
+- **V**aluable - Delivers user/business value
+- **E**stimable - Clear enough to understand scope
+- **S**mall - Completable in 1-3 sessions
+- **T**estable - Has measurable success criteria
 
 **Minimum 200 features** covering all aspects of the project specification.
+
+### Enhanced Feature Schema
+
+Each feature should follow this structure:
+
+```json
+{
+  "id": "feat_001",
+  "category": "core_behavior",
+  "title": "Search employees by skill",
+  "description": "Users can search for employees who have specific skills",
+  "business_value": "Enables resource managers to quickly find qualified staff",
+
+  "acceptance_criteria": [
+    {
+      "id": "ac_001",
+      "given": "A knowledge base with employee skill data",
+      "when": "User queries 'find Python developers'",
+      "then": "Returns list of employees with Python skill"
+    }
+  ],
+
+  "test_approach": {
+    "test_types": ["unit", "integration", "evaluation"],
+    "fixtures": ["fixtures/employees.json"],
+    "mocks": ["knowledge_base"],
+    "assertions": ["Response contains employee objects"]
+  },
+
+  "dependencies": {
+    "features": ["kb_setup"],
+    "infrastructure": ["s3_vectors"],
+    "credentials": ["AWS_PROFILE"]
+  },
+
+  "dor_checklist": {
+    "clear_description": true,
+    "acceptance_criteria": true,
+    "test_approach": true,
+    "dependencies_resolved": false,
+    "tech_aligned": true
+  },
+
+  "dod_checklist": {
+    "code_complete": false,
+    "unit_tests_pass": false,
+    "coverage_threshold_met": false,
+    "integration_tests_pass": false,
+    "deployed": false,
+    "smoke_tests_pass": false
+  },
+
+  "passes": false
+}
+```
 
 ### How to Extract Categories from app_spec.txt
 
@@ -306,12 +372,88 @@ Include tests for:
 ```json
 {
   "category": "infrastructure",
-  "test_type": "deployment_validation",
-  "description": "Infrastructure resource is created correctly",
+  "test_type": "module_validation",
+  "description": "Terraform module is created correctly",
   "validation": [
-    "Resource creation succeeds",
-    "Resource has correct configuration",
-    "Resource passes security requirements"
+    "Module files exist",
+    "terraform validate passes",
+    "terraform plan shows expected resources"
+  ],
+  "passes": false
+}
+```
+
+### Category: deployment (10+ tests) - CRITICAL
+
+**These tests verify that infrastructure and agent are ACTUALLY DEPLOYED, not just created.**
+**The agent MUST run terraform apply and agentcore deploy to pass these tests.**
+
+```json
+{
+  "category": "deployment",
+  "test_type": "terraform_apply",
+  "description": "Terraform apply completes successfully",
+  "validation": [
+    "terraform apply exits with code 0",
+    "No errors in terraform output",
+    "State file updated"
+  ],
+  "passes": false
+}
+```
+
+```json
+{
+  "category": "deployment",
+  "test_type": "resource_verification",
+  "description": "AWS resources exist after deployment",
+  "validation": [
+    "S3 bucket exists and is accessible (aws s3 ls)",
+    "KMS key exists with correct alias",
+    "IAM roles exist with correct permissions",
+    "Other resources per app_spec.txt verified via CLI"
+  ],
+  "passes": false
+}
+```
+
+```json
+{
+  "category": "deployment",
+  "test_type": "agent_packaging",
+  "description": "Agent is packaged for deployment",
+  "validation": [
+    "agent.zip created with src/ and requirements.txt",
+    "Entry point (main.py) exists and is valid",
+    "All dependencies included"
+  ],
+  "passes": false
+}
+```
+
+```json
+{
+  "category": "deployment",
+  "test_type": "agent_deployment",
+  "description": "Agent is deployed to AgentCore",
+  "validation": [
+    "agentcore deploy succeeds",
+    "agentcore status shows agent is running",
+    "No errors in deployment logs"
+  ],
+  "passes": false
+}
+```
+
+```json
+{
+  "category": "deployment",
+  "test_type": "smoke_test",
+  "description": "Deployed agent responds to test queries",
+  "validation": [
+    "agentcore test returns valid response",
+    "Response contains expected content",
+    "Response time within acceptable limits"
   ],
   "passes": false
 }

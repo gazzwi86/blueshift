@@ -27,10 +27,18 @@ def count_passing_tests(project_dir: Path) -> tuple[int, int]:
 
     try:
         with open(tests_file, "r") as f:
-            tests = json.load(f)
+            data = json.load(f)
+
+        # Handle both formats: list of tests or object with "tests" key
+        if isinstance(data, list):
+            tests = data
+        elif isinstance(data, dict) and "tests" in data:
+            tests = data["tests"]
+        else:
+            return 0, 0
 
         total = len(tests)
-        passing = sum(1 for test in tests if test.get("passes", False))
+        passing = sum(1 for test in tests if isinstance(test, dict) and test.get("passes", False))
 
         return passing, total
     except (json.JSONDecodeError, IOError):
@@ -54,10 +62,20 @@ def count_by_category(project_dir: Path) -> dict[str, tuple[int, int]]:
 
     try:
         with open(tests_file, "r") as f:
-            tests = json.load(f)
+            data = json.load(f)
+
+        # Handle both formats: list of tests or object with "tests" key
+        if isinstance(data, list):
+            tests = data
+        elif isinstance(data, dict) and "tests" in data:
+            tests = data["tests"]
+        else:
+            return {}
 
         categories = {}
         for test in tests:
+            if not isinstance(test, dict):
+                continue
             cat = test.get("category", "unknown")
             if cat not in categories:
                 categories[cat] = [0, 0]

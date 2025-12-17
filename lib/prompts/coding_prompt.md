@@ -126,6 +126,42 @@ Work on features for the CURRENT PHASE only. Focus on:
 2. Tests with `"passes": false` in those categories
 3. Following patterns from `app_spec.txt`
 
+### Definition of Ready Check
+
+Before implementing a feature, verify its DoR checklist:
+
+```bash
+# Check feature's dor_checklist in feature_list.json
+# All items should be true before starting
+```
+
+**If DoR is incomplete:**
+1. Research to fill gaps (use WebSearch for best practices, documentation)
+2. Update feature_list.json with findings
+3. If still ambiguous after research, make a reasonable choice and document it
+4. Proceed only when DoR checklist is complete
+
+### Handling Ambiguity
+
+When specifications are unclear:
+
+1. **Research first** - Use WebSearch to find:
+   - Official documentation
+   - Best practices for the technology
+   - Common patterns and solutions
+2. **Make a decision** based on evidence
+3. **Document your choice** in the code or claude-progress.txt
+4. **Continue** - Don't create HITL checkpoints for minor ambiguities
+
+Example:
+```bash
+# If unclear on how to structure Strands Agent tools:
+# 1. WebSearch "strands agents @tool decorator best practices 2025"
+# 2. Read official docs
+# 3. Choose pattern based on findings
+# 4. Document choice in code comments
+```
+
 ### For Phase 1 - Test Setup First:
 
 If in Phase 1 and `test_setup` category exists, complete it FIRST:
@@ -151,6 +187,54 @@ Only after test_setup is complete, proceed to other categories.
 4. **Update feature_list.json** - change `"passes": false` to `"passes": true`
 5. **Commit** with descriptive message
 6. **Repeat** until all current phase tests pass
+
+### CRITICAL: For Infrastructure Phases - DEPLOY After Module Creation
+
+If you are in an Infrastructure phase and terraform modules have been created:
+
+**DO NOT just mark tests as passing without actually deploying!**
+
+```bash
+# 1. Deploy infrastructure
+cd infra/environments/dev
+terraform init
+terraform plan -out=tfplan
+terraform apply tfplan  # or -auto-approve for dev
+
+# 2. Verify deployment with AWS CLI
+aws s3 ls | grep <project>
+aws kms list-aliases | grep <project>
+aws iam list-roles | grep <project>
+
+# 3. Run infrastructure tests against DEPLOYED resources
+pytest tests/test_infrastructure.py -v
+```
+
+Only mark infrastructure deployment tests as passing AFTER `terraform apply` succeeds AND resources are verified.
+
+### CRITICAL: For Agent Deployment Phases - DEPLOY THE AGENT
+
+If workflow_phases.md specifies agent deployment:
+
+```bash
+# 1. Ensure agent entry point exists (main.py with Strands Agent)
+ls src/main.py || echo "ERROR: Create agent entry point first"
+
+# 2. Package the agent
+zip -r agent.zip src/ requirements.txt
+
+# 3. Deploy via MCP or CLI
+# MCP: mcp__agentcore__deploy --env dev --source agent.zip
+# CLI: agentcore deploy --env dev --source agent.zip
+
+# 4. Smoke test
+agentcore test --env dev --query "Hello, are you working?"
+
+# 5. Check logs
+agentcore logs --env dev --tail 20
+```
+
+Only mark agent deployment tests as passing AFTER the agent responds to smoke tests.
 
 ### CI/CD (Built Incrementally)
 
@@ -199,21 +283,55 @@ After implementing features, check if the phase is complete:
 
 ---
 
-## STEP 8: UPDATE feature_list.json (CAREFULLY!)
+## STEP 8: VERIFY DEFINITION OF DONE
 
-**YOU CAN ONLY MODIFY ONE FIELD: "passes"**
+Before marking a feature as passing, verify ALL DoD criteria:
 
-After thorough verification with passing tests:
+### DoD Checklist
+
+1. **Code Complete**
+   - [ ] All acceptance criteria implemented
+   - [ ] No TODO comments or placeholder code
+   - [ ] Error handling in place
+
+2. **Tests Pass**
+   - [ ] Unit tests pass
+   - [ ] Coverage >= 80% for new code
+   - [ ] Integration tests pass (if applicable)
+   - [ ] Evaluation scores meet thresholds (if AI behavior)
+
+3. **Deployed (if applicable)**
+   - [ ] terraform apply succeeded
+   - [ ] agentcore deploy succeeded
+   - [ ] Smoke tests pass
+
+4. **Documented**
+   - [ ] Code has appropriate comments
+   - [ ] Progress updated in claude-progress.txt
+
+### Updating feature_list.json
+
+After verifying DoD, update the feature:
 
 ```json
-"passes": false → "passes": true
+{
+  "dod_checklist": {
+    "code_complete": true,
+    "unit_tests_pass": true,
+    "coverage_threshold_met": true,
+    "integration_tests_pass": true,
+    "deployed": true,
+    "smoke_tests_pass": true
+  },
+  "passes": true
+}
 ```
 
 **NEVER:**
 - Remove tests
 - Edit test descriptions
 - Modify thresholds
-- Reorder tests
+- Mark `passes: true` if any DoD item is false
 
 ---
 

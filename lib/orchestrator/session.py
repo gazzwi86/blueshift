@@ -11,6 +11,8 @@ from typing import Optional, Callable, Any
 
 from claude_code_sdk import ClaudeSDKClient
 
+from .logger import SessionLogger
+
 
 # Configuration
 AUTO_CONTINUE_DELAY_SECONDS = 3
@@ -21,6 +23,7 @@ async def run_agent_session(
     message: str,
     project_dir: Path,
     on_tool_use: Optional[Callable[[str, Any], None]] = None,
+    session_id: int = 1,
 ) -> tuple[str, str]:
     """
     Run a single agent session using Claude Agent SDK.
@@ -30,64 +33,64 @@ async def run_agent_session(
         message: The prompt to send
         project_dir: Project directory path
         on_tool_use: Optional callback for tool use events
+        session_id: Session number for logging
 
     Returns:
         (status, response_text) where status is:
         - "continue" if agent should continue working
         - "error" if an error occurred
     """
-    print("Sending prompt to Claude Agent SDK...\n")
+    # Create session logger
+    with SessionLogger(project_dir, session_id) as logger:
+        logger.log("Sending prompt to Claude Agent SDK...\n")
+        logger.log_prompt(message)
 
-    try:
-        await client.query(message)
+        try:
+            await client.query(message)
 
-        response_text = ""
-        async for msg in client.receive_response():
-            msg_type = type(msg).__name__
+            response_text = ""
+            async for msg in client.receive_response():
+                msg_type = type(msg).__name__
 
-            # Handle AssistantMessage (text and tool use)
-            if msg_type == "AssistantMessage" and hasattr(msg, "content"):
-                for block in msg.content:
-                    block_type = type(block).__name__
+                # Handle AssistantMessage (text and tool use)
+                if msg_type == "AssistantMessage" and hasattr(msg, "content"):
+                    for block in msg.content:
+                        block_type = type(block).__name__
 
-                    if block_type == "TextBlock" and hasattr(block, "text"):
-                        response_text += block.text
-                        print(block.text, end="", flush=True)
-                    elif block_type == "ToolUseBlock" and hasattr(block, "name"):
-                        print(f"\n[Tool: {block.name}]", flush=True)
-                        if hasattr(block, "input"):
-                            input_str = str(block.input)
-                            if len(input_str) > 200:
-                                print(f"   Input: {input_str[:200]}...", flush=True)
-                            else:
-                                print(f"   Input: {input_str}", flush=True)
+                        if block_type == "TextBlock" and hasattr(block, "text"):
+                            response_text += block.text
+                            logger.log_text(block.text)
+                        elif block_type == "ToolUseBlock" and hasattr(block, "name"):
+                            tool_input = getattr(block, "input", None)
+                            logger.log_tool_use(block.name, tool_input)
 
-                        if on_tool_use:
-                            on_tool_use(block.name, getattr(block, "input", None))
+                            if on_tool_use:
+                                on_tool_use(block.name, tool_input)
 
-            # Handle UserMessage (tool results)
-            elif msg_type == "UserMessage" and hasattr(msg, "content"):
-                for block in msg.content:
-                    block_type = type(block).__name__
+                # Handle UserMessage (tool results)
+                elif msg_type == "UserMessage" and hasattr(msg, "content"):
+                    for block in msg.content:
+                        block_type = type(block).__name__
 
-                    if block_type == "ToolResultBlock":
-                        result_content = getattr(block, "content", "")
-                        is_error = getattr(block, "is_error", False)
+                        if block_type == "ToolResultBlock":
+                            result_content = getattr(block, "content", "")
+                            is_error = getattr(block, "is_error", False)
+                            is_blocked = "blocked" in str(result_content).lower()
 
-                        if "blocked" in str(result_content).lower():
-                            print(f"   [BLOCKED] {result_content}", flush=True)
-                        elif is_error:
-                            error_str = str(result_content)[:500]
-                            print(f"   [Error] {error_str}", flush=True)
-                        else:
-                            print("   [Done]", flush=True)
+                            logger.log_tool_result(
+                                str(result_content),
+                                is_error=is_error,
+                                is_blocked=is_blocked
+                            )
 
-        print("\n" + "-" * 70 + "\n")
-        return "continue", response_text
+            logger.log("\n" + "-" * 70 + "\n")
+            logger.log_session_end("continue")
+            return "continue", response_text
 
-    except Exception as e:
-        print(f"Error during agent session: {e}")
-        return "error", str(e)
+        except Exception as e:
+            logger.log_error(e)
+            logger.log_session_end("error")
+            return "error", str(e)
 
 
 class AgentSession:

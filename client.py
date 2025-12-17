@@ -67,8 +67,7 @@ AWS_MCP_TOOLS = [
     "mcp__context7__*",
 ]
 
-# Built-in tools - explicitly NO WebSearch to prevent runtime research
-# All research should be completed before agent starts (in app_spec.txt)
+# Built-in tools available to the agent
 BUILTIN_TOOLS = [
     "Read",
     "Write",
@@ -76,7 +75,8 @@ BUILTIN_TOOLS = [
     "Glob",
     "Grep",
     "Bash",
-    # WebSearch intentionally excluded - research belongs in app_spec.txt
+    "WebSearch",   # Enabled: Agent can research to resolve ambiguities
+    "WebFetch",    # Enabled: Agent can fetch documentation and examples
     # Task/Agent tools are managed by Claude Code itself
 ]
 

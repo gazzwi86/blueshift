@@ -25,11 +25,19 @@ class ProjectSecurity(BaseSecurity):
         "tail",
         "wc",
         "grep",
+        "find",
 
         # File operations
         "cp",
         "mkdir",
+        "touch",
         "chmod",  # Validated: only +x allowed
+
+        # Output/scripting
+        "echo",
+        "xargs",
+        "test",  # Shell test command for conditionals
+        "[",     # Alternative test syntax
 
         # Directory
         "pwd",
@@ -72,6 +80,17 @@ class ProjectSecurity(BaseSecurity):
         "pip3",
         "uv",
         "uvx",
+
+        # Research and web access
+        "curl",    # For API calls and web fetching
+        "wget",    # For downloading files
+
+        # AgentCore CLI
+        "agentcore",  # Agent deployment and management
+
+        # Zip for packaging
+        "zip",
+        "unzip",
     }
 
     # Commands that need additional validation

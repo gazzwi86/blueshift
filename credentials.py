@@ -6,8 +6,12 @@ Load and validate credentials from .env file.
 Provides clear error messages for missing credentials.
 
 Two credential scopes:
-1. Harness credentials - for running the autonomous agent harness
-2. Runtime credentials - for the PixieOps agent when deployed to AgentCore
+1. Harness credentials (GENERIC) - for running the autonomous agent harness
+2. Runtime credentials (PROJECT-SPECIFIC) - example for PixieOps project
+
+NOTE: The RuntimeCredentials, SnowflakeCredentials, and SharePointCredentials
+classes below are PROJECT-SPECIFIC examples. Edit or remove them for your
+project's needs. The HarnessCredentials class is generic and reusable.
 """
 
 import os
@@ -53,9 +57,13 @@ class HarnessCredentials:
         return bool(self.github_token)
 
 
+# =============================================================================
+# PROJECT-SPECIFIC CREDENTIALS (Example for PixieOps - edit for your project)
+# =============================================================================
+
 @dataclass
 class SnowflakeCredentials:
-    """Snowflake data warehouse credentials."""
+    """Snowflake data warehouse credentials. PROJECT-SPECIFIC - edit for your project."""
     account: Optional[str] = None
     user: Optional[str] = None
     password: Optional[str] = None

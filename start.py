@@ -13,6 +13,7 @@ Example Usage:
 import argparse
 import asyncio
 import os
+import subprocess
 from pathlib import Path
 
 # Import library modules
@@ -48,7 +49,7 @@ Examples:
   python start.py --project-dir ./pixieops --max-iterations 5
 
 Environment Variables:
-  ANTHROPIC_API_KEY    Your Anthropic API key (required)
+  ANTHROPIC_API_KEY    Your Anthropic API key (optional if using Claude Code subscription)
         """,
     )
 
@@ -114,6 +115,50 @@ async def run_autonomous_agent(
     # Create project directory
     project_dir.mkdir(parents=True, exist_ok=True)
 
+    # Initialize git repository in the project directory if it doesn't exist
+    # This keeps the generated project separate from the harness repository
+    project_git_dir = project_dir / ".git"
+    if not project_git_dir.exists():
+        print("Initializing git repository in project directory...")
+        result = subprocess.run(
+            ["git", "init"],
+            cwd=project_dir,
+            capture_output=True,
+            text=True
+        )
+        if result.returncode == 0:
+            print(f"  Created git repository in {project_dir}")
+            # Create initial .gitignore
+            gitignore = project_dir / ".gitignore"
+            if not gitignore.exists():
+                gitignore.write_text(
+                    "# Python\n"
+                    "__pycache__/\n"
+                    "*.pyc\n"
+                    ".venv/\n"
+                    "venv/\n"
+                    "\n"
+                    "# Environment\n"
+                    ".env\n"
+                    ".env.local\n"
+                    "\n"
+                    "# IDE\n"
+                    ".idea/\n"
+                    ".vscode/\n"
+                    "\n"
+                    "# Logs\n"
+                    "logs/\n"
+                    "*.log\n"
+                    "\n"
+                    "# Terraform\n"
+                    ".terraform/\n"
+                    "*.tfstate*\n"
+                )
+                print("  Created .gitignore")
+        else:
+            print(f"  Warning: git init failed: {result.stderr}")
+        print()
+
     # Initialize progress tracker
     tracker = ProgressTracker(project_dir)
     is_first_run = tracker.is_first_run()
@@ -129,6 +174,16 @@ async def run_autonomous_agent(
         print()
         # Copy the app spec into the project directory
         copy_spec_to_project(project_dir)
+
+        # Copy .env to project directory if it exists and hasn't been copied
+        harness_env = Path(__file__).parent / ".env"
+        project_env = project_dir / ".env"
+        if harness_env.exists() and not project_env.exists():
+            import shutil
+            shutil.copy(harness_env, project_env)
+            print(f"Copied .env to {project_dir}")
+            print("  (The agent can modify this for project-specific needs)")
+            print()
     else:
         print("Continuing existing project")
         print_progress_summary(project_dir)
@@ -152,18 +207,65 @@ async def run_autonomous_agent(
         client = create_client(project_dir, model, creds)
 
         # Choose prompt based on session type
+        used_initializer = False
         if is_first_run:
             prompt = get_initializer_prompt()
+            used_initializer = True
             is_first_run = False  # Only use initializer once
         else:
             prompt = get_coding_prompt()
 
         # Run session with async context manager
         async with client:
-            status, response = await run_agent_session(client, prompt, project_dir)
+            status, response = await run_agent_session(client, prompt, project_dir, session_id=iteration)
 
         # Check for HITL checkpoint file
         hitl_file = project_dir / "HITL_CHECKPOINT.md"
+        hitl_feedback_file = project_dir / "HITL_FEEDBACK.md"
+
+        # If initializer session completed but didn't create HITL checkpoint, warn
+        if used_initializer and not hitl_file.exists():
+            print("\n" + "=" * 70)
+            print("  WARNING: Initializer completed without HITL checkpoint")
+            print("=" * 70)
+            print("\nThe initializer should create HITL_CHECKPOINT.md for review.")
+            print("This may indicate the agent didn't complete initialization properly.")
+            print("\nOptions:")
+            print("  1. Review generated files manually")
+            print("  2. Create HITL_CHECKPOINT.md yourself if needed")
+            print("  3. Continue anyway (may skip human review)")
+            print()
+
+            # Force a HITL checkpoint for initializer
+            result = checkpoint(
+                name="initializer_review",
+                description="Initializer completed - please review generated files before continuing.",
+                artifacts=[
+                    str(project_dir / "feature_list.json"),
+                    str(project_dir / "fixtures"),
+                ],
+                review_instructions=[
+                    "Review feature_list.json for completeness",
+                    "Check that tech_stack tests match app_spec.txt requirements",
+                    "Verify fixtures are realistic",
+                    "Approve to continue to coding phase"
+                ]
+            )
+
+            if result.decision == HITLDecision.DENY:
+                print("\nAgent halted by human decision.")
+                print(f"Reason: {result.denial_reason}")
+                break
+
+            if result.feedback:
+                # Write feedback to a file the agent can read
+                hitl_feedback_file.write_text(f"# HITL Feedback\n\n{result.feedback}\n")
+                tracker.update_progress(
+                    iteration,
+                    "CONTINUING",
+                    f"HITL feedback: {result.feedback}"
+                )
+
         if hitl_file.exists():
             print("\n" + "=" * 70)
             print("  HITL CHECKPOINT DETECTED")

@@ -1,28 +1,53 @@
 # Ultra Coding Agent - Architecture
 
-## Project Structure (Implemented)
+This document describes the architecture of the autonomous coding agent harness.
+
+Based on patterns from [Anthropic's Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents).
+
+---
+
+## Two-Agent Pattern
+
+The harness uses a **two-agent architecture**:
+
+### Initializer Agent (Session 1 Only)
+- Reads `app_spec.txt` to understand project requirements
+- Researches and creates `testing_strategy.md`
+- Generates `feature_list.json` with 200+ test cases
+- Creates `workflow_phases.md` defining development phases
+- Sets up project structure, fixtures, and infrastructure scripts
+- Creates HITL checkpoint for human review before coding begins
+
+### Coding Agent (Sessions 2+)
+- Reads progress files and git history to orient itself
+- Follows `workflow_phases.md` to determine current phase
+- Implements features one at a time, following test-driven approach
+- Marks tests as passing in `feature_list.json` (the source of truth)
+- Commits frequently with descriptive messages
+- Checks for stage gates requiring HITL approval
+
+---
+
+## Project Structure
 
 ```
 ultra-coding-agent/
 │
-├── lib/                              # REUSABLE LIBRARY
-│   ├── __init__.py
+├── lib/                              # REUSABLE LIBRARY (generic)
+│   ├── __init__.py                   # Package exports
 │   │
 │   ├── hitl.py                       # Human-in-the-loop checkpoint system
-│   │                                 # - Interactive CLI (approve/deny/amend)
-│   │                                 # - HITLCheckpoint, HITLManager classes
+│   │                                 # - checkpoint(), require_approval()
+│   │                                 # - HITLCheckpoint, HITLResponse classes
 │   │
-│   ├── client.py                     # Claude SDK client builder
-│   │                                 # - create_base_client()
-│   │                                 # - ClientBuilder pattern
-│   │
-│   ├── prompts.py                    # Prompt template loader
-│   │                                 # - PromptLoader class
-│   │                                 # - get_initializer_prompt(), get_coding_prompt()
+│   ├── prompts/                      # Generic prompt templates
+│   │   ├── __init__.py               # PromptLoader with combination logic
+│   │   ├── initializer_prompt.md     # First session: setup and planning
+│   │   └── coding_prompt.md          # Subsequent sessions: implementation
 │   │
 │   ├── security/                     # Security framework
 │   │   ├── __init__.py
-│   │   ├── base.py                   # BaseSecurity class, validation functions
+│   │   ├── base.py                   # BaseSecurity class, validators
 │   │   └── test_security.py          # Security tests
 │   │
 │   ├── evaluation/                   # Agent evaluation framework
@@ -32,14 +57,14 @@ ultra-coding-agent/
 │   │       ├── __init__.py
 │   │       └── base.py               # BaseEvaluator, LLMJudgeEvaluator
 │   │
-│   ├── infrastructure/               # Infrastructure testing
+│   ├── infrastructure/               # Infrastructure validation
 │   │   ├── __init__.py
-│   │   ├── terraform.py              # TerraformValidator, TerraformTestRunner
+│   │   ├── terraform.py              # TerraformValidator
 │   │   └── aws.py                    # AWSResourceChecker
 │   │
 │   ├── credentials/                  # Credential validation
 │   │   ├── __init__.py
-│   │   └── validator.py              # CredentialValidator, ValidationResult
+│   │   └── validator.py              # CredentialValidator
 │   │
 │   ├── progress/                     # Progress tracking
 │   │   ├── __init__.py
@@ -47,159 +72,101 @@ ultra-coding-agent/
 │   │
 │   └── orchestrator/                 # Session management
 │       ├── __init__.py
-│       └── session.py                # run_agent_session(), AgentSession
+│       ├── session.py                # run_agent_session()
+│       └── logger.py                 # SessionLogger for debugging
 │
-├── prompts/                          # PROMPT TEMPLATES
-│   ├── initializer_prompt.md         # First session: setup, fixtures, feature_list
-│   ├── coding_prompt.md              # Continuation: implement features
-│   ├── harness_capabilities.md       # Available tools documentation
-│   └── app_spec.txt                  # Project specification (edit for your project)
+├── project_context/                  # PROJECT-SPECIFIC CONTEXT
+│   ├── app_spec.txt                  # Project specification (required)
+│   ├── harness_capabilities.md       # Available tools/credentials (required)
+│   ├── workflow_template.md          # Phase templates (required)
+│   ├── stage_gates.md                # HITL trigger definitions (required)
+│   ├── init_additions.md             # Optional: extra initializer instructions
+│   └── coding_additions.md           # Optional: extra coding instructions
 │
-├── start.py                          # ENTRY POINT
-│                                     # - CLI argument parsing
-│                                     # - Main agent loop
-│                                     # - HITL checkpoint handling
+├── generations/                      # GENERATED PROJECTS (gitignored)
+│   └── <project>/                    # Each project has its own git repo
+│       ├── .git/                     # Separate from harness git
+│       ├── feature_list.json         # Test cases (source of truth)
+│       ├── testing_strategy.md       # Testing approach for this project
+│       ├── workflow_phases.md        # Phases for this project
+│       ├── claude-progress.txt       # Session handoff notes
+│       ├── logs/                     # Session logs for debugging
+│       └── ...                       # Generated application code
 │
-├── preflight.py                      # PRE-RUN VERIFICATION
-│                                     # - Check all imports work
-│                                     # - Validate credentials
-│                                     # - Run security tests
-│                                     # - Verify prompt files exist
+├── start.py                          # Entry point
+├── preflight.py                      # Pre-run verification
+├── security.py                       # Project-specific security config
+├── credentials.py                    # Project-specific credentials
+├── client.py                         # Project-specific MCP config
 │
-├── security.py                       # PROJECT-SPECIFIC SECURITY
-│                                     # - Extends lib/security/base.py
-│                                     # - ALLOWED_COMMANDS set
-│                                     # - bash_security_hook export
-│
-├── credentials.py                    # PROJECT-SPECIFIC CREDENTIALS
-│                                     # - get_credentials()
-│                                     # - validate_credentials()
-│                                     # - print_credential_status()
-│
-├── client.py                         # PROJECT-SPECIFIC CLIENT
-│                                     # - create_client() with MCP servers
-│                                     # - MCP tool definitions
-│
-├── slack_helpers.py                  # PROJECT-SPECIFIC HELPER
-│
-├── .env.example                      # Environment template (safe to commit)
-├── .gitignore                        # Git ignore patterns
-├── pyproject.toml                    # Python project config
-├── LICENSE                           # MIT License
-├── CONTRIBUTING.md                   # Contribution guidelines
-└── README.md                         # This documentation
+├── .env.example                      # Environment template
+└── pyproject.toml                    # Python dependencies
 ```
 
-## Library vs Project-Specific
+---
 
-### Library (lib/) - Reusable
+## Key Artifacts
 
-These modules are project-agnostic and can be used across different agent projects:
+### feature_list.json (Source of Truth)
 
-| Module | Purpose | Key Exports |
-|--------|---------|-------------|
-| `lib/hitl.py` | Interactive checkpoints | `checkpoint()`, `require_approval()`, `HITLCheckpoint` |
-| `lib/client.py` | SDK client builder | `create_base_client()`, `ClientBuilder` |
-| `lib/prompts.py` | Prompt loading | `PromptLoader`, `get_initializer_prompt()` |
-| `lib/security/base.py` | Security framework | `BaseSecurity`, validation functions |
-| `lib/evaluation/` | Agent evaluation | `EvaluationHarness`, `BaseEvaluator` |
-| `lib/infrastructure/` | Terraform/AWS | `TerraformValidator`, `AWSResourceChecker` |
-| `lib/credentials/` | Credential validation | `CredentialValidator` |
-| `lib/progress/` | Progress tracking | `ProgressTracker` |
-| `lib/orchestrator/` | Session management | `run_agent_session()` |
+The feature list is the **anchor** for the entire project. It contains:
+- Test cases with explicit descriptions
+- Steps for verification
+- `"passes": false` → `"passes": true` as features complete
 
-### Project-Specific (root) - Configured
+**Critical rule**: Tests are NEVER removed, only marked as passing.
 
-These files configure the library for the specific project:
-
-| File | Purpose | Extends |
-|------|---------|---------|
-| `start.py` | Entry point | Uses lib/orchestrator |
-| `security.py` | Command allowlist | Extends lib/security/base.BaseSecurity |
-| `credentials.py` | Required credentials | Uses lib/credentials/validator |
-| `client.py` | MCP server config | Uses lib/client |
-| `prompts/app_spec.txt` | Project spec | N/A |
-
-## Extending for New Projects
-
-### 1. Security Configuration
-
-Edit `security.py` to customize allowed commands:
-
-```python
-from lib.security.base import BaseSecurity
-
-class ProjectSecurity(BaseSecurity):
-    ALLOWED_COMMANDS = {
-        "ls", "cat", "git",  # Basic
-        "npm", "node",        # Node.js
-        "terraform", "aws",   # Infrastructure
-        # Add project-specific commands
-    }
-```
-
-### 2. Credential Requirements
-
-Edit `credentials.py` to define required credentials:
-
-```python
-from lib.credentials import CredentialValidator
-
-def get_credentials():
-    validator = CredentialValidator()
-    validator.require_aws()
-    validator.require("CUSTOM_API_KEY", required=True)
-    return validator.validate()
-```
-
-### 3. MCP Server Configuration
-
-Edit `client.py` to configure MCP servers:
-
-```python
-mcp_servers = {
-    "puppeteer": {...},
-    "slack": {...},
-    "custom_server": {
-        "command": "npx",
-        "args": ["-y", "@your/mcp-server"]
-    }
+```json
+{
+  "category": "core_behavior",
+  "test_type": "functional_test",
+  "description": "User can search employees by skill",
+  "validation": ["Returns matching employees", "Includes skill details"],
+  "passes": false
 }
 ```
 
-### 4. Project Specification
+### testing_strategy.md
 
-Edit `prompts/app_spec.txt` with your project requirements.
+Created by the initializer after researching the tech stack:
+- Identifies testing layers (unit, integration, e2e)
+- Recommends testing frameworks
+- Documents CI/CD requirements
+- Defines quality gates and thresholds
 
-## HITL System
+### workflow_phases.md
 
-Interactive CLI checkpoints:
+Defines concrete phases for the project:
+- Current phase indicator
+- Categories from feature_list.json to complete
+- Exit criteria for each phase
+- Stage gate references where HITL required
+
+### claude-progress.txt
+
+Session handoff notes that bridge context windows:
+- What was completed in each session
+- Current phase and status
+- Test counts by category
+- What to work on next
+
+---
+
+## Prompt Loading
+
+The `PromptLoader` class combines generic templates with project-specific additions:
 
 ```
-======================================================================
-  HUMAN-IN-THE-LOOP CHECKPOINT
-======================================================================
-
-  Checkpoint: initializer_complete
-  Review generated test fixtures
-
-  Generated Artifacts:
-    - feature_list.json - 150+ evaluation test cases
-    - fixtures/ - Synthetic test data
-
-  Please Review:
-    1. Are test cases comprehensive?
-    2. Is the synthetic data realistic?
-
-======================================================================
-
-  Options:
-    [A] Approve - Continue with execution
-    [D] Deny    - Halt execution (provide reason)
-    [M] Amend   - Approve with feedback/changes
-
-  Your decision (A/D/M):
+lib/prompts/initializer_prompt.md     (generic template)
+           +
+project_context/init_additions.md     (optional project-specific)
+           =
+Final initializer prompt
 ```
+
+This allows customization without modifying generic templates.
+
+---
 
 ## Session Flow
 
@@ -207,49 +174,99 @@ Interactive CLI checkpoints:
 start.py
     │
     ▼
-Validate credentials (fail-fast)
+Load credentials (fail-fast if required missing)
     │
     ▼
-Check for HITL_CHECKPOINT.md
+Create/verify project directory with git init
     │
-    ├─ If exists: Display checkpoint, wait for decision
+    ▼
+Copy project_context files to project
+    │
+    ▼
+Check for HITL checkpoint file
+    │
+    ├─ If HITL_CHECKPOINT.md exists → Wait for human decision
     │
     ▼
 Create Claude SDK client
     │
     ▼
-Choose prompt (initializer or coding)
+Choose prompt:
+    ├─ First run (no feature_list.json) → Initializer prompt
+    └─ Subsequent runs → Coding prompt
     │
     ▼
 run_agent_session()
     │
     ▼
-Process response, check for HITL
+Log to project/logs/session_*.log
+    │
+    ▼
+Check for new HITL checkpoint
     │
     ▼
 Auto-continue or halt
 ```
 
-## Testing
+---
 
-### Preflight Check (Recommended)
+## Security Model (Defense in Depth)
 
-Run before starting the harness to verify configuration:
+1. **OS-level Sandbox**: Bash commands run in isolated environment
+2. **Filesystem Restrictions**: Operations restricted to project directory
+3. **Command Allowlist**: Only explicitly permitted commands can run
+4. **MCP Server Isolation**: Each server runs in its own process
 
-```bash
-python preflight.py        # Full check (includes security tests)
-python preflight.py -q     # Quick check (skip security tests)
+See `security.py` for the project-specific allowlist.
+
+---
+
+## HITL (Human-in-the-Loop) System
+
+Interactive CLI checkpoints where the agent pauses for human decision:
+
+```
+======================================================================
+  HUMAN-IN-THE-LOOP CHECKPOINT
+======================================================================
+
+  Checkpoint: initializer_complete
+  Review generated test fixtures and workflow phases
+
+  Options:
+    [A] Approve - Continue with execution
+    [D] Deny    - Halt execution (provide reason)
+    [M] Amend   - Approve with feedback/changes
 ```
 
-### Individual Tests
+Stage gates in `stage_gates.md` define when HITL is required:
+- `post_initialization` - After initializer creates artifacts
+- `pre_slack_integration` - Before Slack setup (requires manual app config)
+- `pre_production` - Before production deployment
 
-```bash
-# Security tests only
-python -m lib.security.test_security
+---
 
-# Verify imports only
-python -c "from lib.hitl import checkpoint; from lib.evaluation import EvaluationHarness; print('OK')"
+## Session Logging
 
-# Check credentials
-python -c "from credentials import get_credentials; c = get_credentials(); print('OK')"
-```
+Full session transcripts are saved for debugging:
+- `<project>/logs/session_YYYYMMDD_HHMMSS_NNN.log` - Human-readable
+- `<project>/logs/session_YYYYMMDD_HHMMSS_NNN.jsonl` - Machine-readable
+
+---
+
+## Extending for New Projects
+
+1. **Edit `project_context/app_spec.txt`** - Define your project requirements
+2. **Edit `project_context/stage_gates.md`** - Define HITL triggers
+3. **Edit `security.py`** - Add allowed commands for your stack
+4. **Edit `credentials.py`** - Add required credentials
+5. **Edit `client.py`** - Configure MCP servers
+6. **Optional**: Add `init_additions.md` or `coding_additions.md`
+
+---
+
+## References
+
+- [Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)
+- [Claude Quickstarts: Autonomous Coding](https://github.com/anthropics/claude-quickstarts/tree/main/autonomous-coding)
+- [Claude Code SDK](https://github.com/anthropics/claude-code)
