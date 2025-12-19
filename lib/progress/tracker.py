@@ -12,7 +12,7 @@ from typing import Optional
 
 def count_passing_tests(project_dir: Path) -> tuple[int, int]:
     """
-    Count passing and total tests in feature_list.json.
+    Count passing and total tests/features in feature_list.json.
 
     Args:
         project_dir: Directory containing feature_list.json
@@ -29,11 +29,19 @@ def count_passing_tests(project_dir: Path) -> tuple[int, int]:
         with open(tests_file, "r") as f:
             data = json.load(f)
 
-        # Handle both formats: list of tests or object with "tests" key
+        # Handle multiple formats:
+        # - list of tests/features directly
+        # - object with "tests" key (old format)
+        # - object with "features" key (new format)
         if isinstance(data, list):
             tests = data
-        elif isinstance(data, dict) and "tests" in data:
-            tests = data["tests"]
+        elif isinstance(data, dict):
+            if "features" in data:
+                tests = data["features"]
+            elif "tests" in data:
+                tests = data["tests"]
+            else:
+                return 0, 0
         else:
             return 0, 0
 
@@ -47,7 +55,7 @@ def count_passing_tests(project_dir: Path) -> tuple[int, int]:
 
 def count_by_category(project_dir: Path) -> dict[str, tuple[int, int]]:
     """
-    Count passing/total tests by category.
+    Count passing/total tests/features by category.
 
     Args:
         project_dir: Directory containing feature_list.json
@@ -64,11 +72,19 @@ def count_by_category(project_dir: Path) -> dict[str, tuple[int, int]]:
         with open(tests_file, "r") as f:
             data = json.load(f)
 
-        # Handle both formats: list of tests or object with "tests" key
+        # Handle multiple formats:
+        # - list of tests/features directly
+        # - object with "tests" key (old format)
+        # - object with "features" key (new format)
         if isinstance(data, list):
             tests = data
-        elif isinstance(data, dict) and "tests" in data:
-            tests = data["tests"]
+        elif isinstance(data, dict):
+            if "features" in data:
+                tests = data["features"]
+            elif "tests" in data:
+                tests = data["tests"]
+            else:
+                return {}
         else:
             return {}
 

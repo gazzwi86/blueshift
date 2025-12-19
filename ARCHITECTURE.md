@@ -1,6 +1,6 @@
-# Ultra Coding Agent - Architecture
+# Blueshift - Architecture
 
-This document describes the architecture of the autonomous coding agent harness.
+This document describes the architecture of the Blueshift autonomous coding agent harness.
 
 Based on patterns from [Anthropic's Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents).
 
@@ -31,7 +31,7 @@ The harness uses a **two-agent architecture**:
 ## Project Structure
 
 ```
-ultra-coding-agent/
+blueshift/
 │
 ├── lib/                              # REUSABLE LIBRARY (generic)
 │   ├── __init__.py                   # Package exports

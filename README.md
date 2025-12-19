@@ -1,6 +1,10 @@
-# Ultra Coding Agent
+# Blushift
 
 A generic, extensible harness for building autonomous AI agents using the Claude Code SDK. Designed for projects that need human-in-the-loop checkpoints, evaluation frameworks, and infrastructure automation.
+
+Blu-shift (or Blueshift) is a term borrowed from astrophysics. It describes the phenomenon where the light from an object moving toward an observer is shifted toward the blue end of the spectrum.
+
+In the context of your agentic harness, it serves as a powerful metaphor for progress, velocity, and closing the gap. While "Redshift" represents things moving away (entropy, technical debt, project drift), Blu-shift represents a project rapidly approaching completion. It signals that the "Squad" is actively pulling the future state of the product toward the present through continuous, 24/7 iteration.
 
 ## Features
 
@@ -25,8 +29,8 @@ A generic, extensible harness for building autonomous AI agents using the Claude
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/ultra-coding-agent.git
-cd ultra-coding-agent
+git clone git@github.com:gazzwi86/blueshift.git
+cd blueshift
 
 # Create virtual environment and install dependencies
 uv venv
@@ -96,7 +100,7 @@ python start.py --project-dir ./my_project
 The harness separates **generic reusable code** from **project-specific configuration**:
 
 ```
-ultra-coding-agent/
+blueshift/
 │
 ├── lib/                              # REUSABLE LIBRARY (generic)
 │   ├── hitl.py                       # Human-in-the-loop checkpoint system
@@ -333,7 +337,7 @@ Auto-continue or halt
 
 **Important**: Each generated project has its own git repository, separate from the harness.
 
-- The harness repository is at `ultra-coding-agent/.git`
+- The harness repository is at `blueshift/.git`
 - Generated projects have their own repos at `generations/<project>/.git`
 - Agent commits go to the project's git, not the harness
 - `generations/` is gitignored in the harness

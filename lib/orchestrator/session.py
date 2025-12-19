@@ -6,16 +6,160 @@ Core agent interaction functions for running autonomous coding sessions.
 """
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Optional, Callable, Any
 
 from claude_code_sdk import ClaudeSDKClient
 
 from .logger import SessionLogger
+from ..verification.post_session_validator import run_post_session_verification
 
 
 # Configuration
 AUTO_CONTINUE_DELAY_SECONDS = 3
+
+# Categories that REQUIRE deployment verification (not just unit tests)
+DEPLOYMENT_REQUIRED_CATEGORIES = {
+    "deployment", "infrastructure", "e2e", "evaluation", "integration"
+}
+
+# DoD fields that MUST be true for a feature to be truly complete
+CRITICAL_DOD_FIELDS = [
+    "code_complete",
+    "unit_tests_pass",
+]
+
+# DoD fields required for deployment/infrastructure features
+DEPLOYMENT_DOD_FIELDS = [
+    "deployed",
+    "smoke_tests_pass",
+    "integration_tests_pass",
+]
+
+# DoD fields required for evaluation features
+EVALUATION_DOD_FIELDS = [
+    "evaluation_threshold_met",
+]
+
+
+def check_feature_truly_complete(feature: dict) -> tuple[bool, list[str]]:
+    """
+    Check if a feature is TRULY complete by verifying its DoD checklist.
+
+    THIS IS THE LAW: A feature is NOT complete unless:
+    1. passes == True
+    2. All critical DoD fields are True
+    3. For deployment/infrastructure/e2e categories: deployed + smoke_tests_pass must be True
+    4. For evaluation categories: evaluation_threshold_met must be True
+
+    Args:
+        feature: Feature dictionary from feature_list.json
+
+    Returns:
+        Tuple of (is_complete, list_of_missing_requirements)
+    """
+    missing = []
+
+    # Basic check: passes must be true
+    if not feature.get("passes"):
+        missing.append("passes=false")
+        return False, missing
+
+    dod = feature.get("dod_checklist", {})
+    category = feature.get("category", "")
+
+    # Check critical DoD fields (required for ALL features)
+    for field in CRITICAL_DOD_FIELDS:
+        if field in dod and not dod.get(field):
+            missing.append(f"dod.{field}=false")
+
+    # Check deployment DoD fields for deployment-related categories
+    if category in DEPLOYMENT_REQUIRED_CATEGORIES:
+        for field in DEPLOYMENT_DOD_FIELDS:
+            if field in dod and not dod.get(field):
+                missing.append(f"dod.{field}=false (REQUIRED for {category})")
+
+    # Check evaluation DoD fields for evaluation category
+    if category == "evaluation":
+        for field in EVALUATION_DOD_FIELDS:
+            if field in dod and not dod.get(field):
+                missing.append(f"dod.{field}=false (REQUIRED for evaluation)")
+
+    return len(missing) == 0, missing
+
+
+def check_project_complete(project_dir: Path) -> bool:
+    """
+    Check if project is GENUINELY complete.
+
+    THIS IS THE LAW - A project is NOT complete unless:
+    1. ALL features have passes=true
+    2. ALL features have their DoD checklists fully satisfied
+    3. Deployment/infrastructure features have deployed=true AND smoke_tests_pass=true
+    4. Evaluation features have evaluation_threshold_met=true
+    5. Integration tests must pass for e2e/integration categories
+
+    This prevents premature completion claims.
+
+    Args:
+        project_dir: Path to the project directory
+
+    Returns:
+        True if ALL features are genuinely complete, False otherwise
+    """
+    feature_list = project_dir / "feature_list.json"
+
+    if not feature_list.exists():
+        return False
+
+    try:
+        with open(feature_list) as f:
+            data = json.load(f)
+
+        features = data.get("features", [])
+        total = data.get("total_features", len(features))
+
+        if total == 0:
+            return False
+
+        # Check each feature for TRUE completion
+        incomplete_features = []
+        for feature in features:
+            is_complete, missing = check_feature_truly_complete(feature)
+            if not is_complete:
+                incomplete_features.append({
+                    "id": feature.get("id", "unknown"),
+                    "category": feature.get("category", "unknown"),
+                    "title": feature.get("title", "unknown"),
+                    "missing": missing
+                })
+
+        # Log incomplete features for debugging
+        if incomplete_features:
+            # Write detailed report to project directory
+            report_path = project_dir / ".completion_check_report.json"
+            report = {
+                "total_features": total,
+                "incomplete_count": len(incomplete_features),
+                "complete_count": total - len(incomplete_features),
+                "completion_percentage": round((total - len(incomplete_features)) / total * 100, 1),
+                "incomplete_features": incomplete_features[:20],  # First 20 for brevity
+                "message": "Project is NOT complete. See incomplete_features for details."
+            }
+            with open(report_path, "w") as f:
+                json.dump(report, f, indent=2)
+
+            return False
+
+        # All features are truly complete
+        return True
+
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        # Log the error
+        error_path = project_dir / ".completion_check_error.txt"
+        error_path.write_text(f"Error checking completion: {e}")
+        return False
 
 
 async def run_agent_session(
@@ -84,8 +228,36 @@ async def run_agent_session(
                             )
 
             logger.log("\n" + "-" * 70 + "\n")
-            logger.log_session_end("continue")
-            return "continue", response_text
+
+            # === HARNESS-CONTROLLED VERIFICATION (THIS IS THE LAW) ===
+            # Run post-session verification to validate agent claims
+            # The agent CANNOT bypass this - it runs in the harness
+            logger.log("\n" + "=" * 70)
+            logger.log("  HARNESS VERIFICATION (Agent cannot bypass this)")
+            logger.log("=" * 70 + "\n")
+
+            verification_results = run_post_session_verification(project_dir, verbose=True)
+
+            # Log verification results
+            infra_passed = verification_results.get("infrastructure", {}).get("passed", False)
+            deploy_passed = verification_results.get("deployment", {}).get("passed", False)
+            eval_passed = verification_results.get("evaluation", {}).get("passed", False)
+
+            logger.log(f"\nVerification Summary:")
+            logger.log(f"  Infrastructure: {'PASS' if infra_passed else 'FAIL'}")
+            logger.log(f"  Deployment: {'PASS' if deploy_passed else 'FAIL'}")
+            logger.log(f"  Evaluation: {'PASS' if eval_passed else 'FAIL'}")
+            logger.log("\n" + "-" * 70 + "\n")
+
+            # Check if project is complete (100% passing)
+            # This MUST come AFTER verification which updates feature_list.json
+            if check_project_complete(project_dir):
+                logger.log("PROJECT COMPLETE: All features passing (100%) - VERIFIED BY HARNESS")
+                logger.log_session_end("stop")
+                return "stop", response_text
+            else:
+                logger.log_session_end("continue")
+                return "continue", response_text
 
         except Exception as e:
             logger.log_error(e)

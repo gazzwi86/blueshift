@@ -1,7 +1,7 @@
 [project]
-name = "ultra-coding-agent"
+name = "blueshift"
 version = "0.1.0"
-description = "Autonomous coding agent using Claude SDK"
+description = "Blueshift - Autonomous coding agent harness using Claude SDK"
 requires-python = "==3.12.*"
 dependencies = [
     "claude-code-sdk>=0.0.25",

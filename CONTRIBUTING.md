@@ -1,6 +1,6 @@
-# Contributing to Ultra Coding Agent
+# Contributing to Blueshift
 
-Thank you for your interest in contributing! This document provides guidelines for contributing to the project.
+Thank you for your interest in contributing to Blueshift! This document provides guidelines for contributing to the project.
 
 ## Code of Conduct
 

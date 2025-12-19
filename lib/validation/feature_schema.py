@@ -113,16 +113,38 @@ FEATURE_SCHEMA = {
                 "coverage_threshold_met"
             ],
             "properties": {
+                # Universal requirements (ALL features)
                 "code_complete": {"type": "boolean"},
                 "unit_tests_pass": {"type": "boolean"},
                 "coverage_threshold_met": {"type": "boolean"},
-                "integration_tests_pass": {"type": "boolean"},
-                "evaluation_threshold_met": {"type": "boolean"},
-                "deployed": {"type": "boolean"},
-                "smoke_tests_pass": {"type": "boolean"},
+                # Deployment/infrastructure/e2e/integration requirements
+                # THIS IS THE LAW - required for these categories, mocks not sufficient
+                "integration_tests_pass": {"type": "boolean"},  # Real service calls, not mocks
+                "deployed": {"type": "boolean"},                 # terraform apply + AWS CLI verified
+                "smoke_tests_pass": {"type": "boolean"},         # Real endpoints respond
+                # Evaluation requirements
+                # THIS IS THE LAW - actual LLM evaluation scores required
+                "evaluation_threshold_met": {"type": "boolean"}, # Actual LLM-as-judge scores
+                # Optional fields
                 "ci_passes": {"type": "boolean"},
                 "documented": {"type": "boolean"}
-            }
+            },
+            "description": """
+                THIS IS THE LAW - DoD requirements by category:
+
+                ALL features require:
+                - code_complete, unit_tests_pass, coverage_threshold_met
+
+                deployment/infrastructure/e2e/integration categories ALSO require:
+                - deployed (terraform apply + AWS CLI, NOT just plan)
+                - smoke_tests_pass (real endpoints, NOT mocks)
+                - integration_tests_pass (real services, NOT mocks)
+
+                evaluation category ALSO requires:
+                - evaluation_threshold_met (actual LLM scores, NOT config values)
+
+                Mocks and fixtures are NOT sufficient for these categories.
+            """
         },
         "coverage": {
             "type": "object",
@@ -262,7 +284,7 @@ def validate_feature(feature: dict, index: int) -> list[ValidationError]:
                     f"Missing DoR field: {field}"
                 ))
 
-    # DoD checklist
+    # DoD checklist - Universal requirements
     if "dod_checklist" in feature:
         dod = feature["dod_checklist"]
         dod_required = ["code_complete", "unit_tests_pass", "coverage_threshold_met"]
@@ -271,6 +293,28 @@ def validate_feature(feature: dict, index: int) -> list[ValidationError]:
                 errors.append(ValidationError(
                     feature_id, f"dod_checklist.{field}",
                     f"Missing DoD field: {field}"
+                ))
+
+        # THIS IS THE LAW - Category-specific DoD requirements
+        category = feature.get("category", "")
+
+        # Deployment/infrastructure/e2e/integration categories require additional DoD fields
+        deployment_categories = {"deployment", "infrastructure", "e2e", "integration"}
+        if category in deployment_categories:
+            deployment_dod_required = ["deployed", "smoke_tests_pass", "integration_tests_pass"]
+            for field in deployment_dod_required:
+                if field not in dod:
+                    errors.append(ValidationError(
+                        feature_id, f"dod_checklist.{field}",
+                        f"Missing DoD field: {field} (REQUIRED for {category} category - mocks not sufficient)"
+                    ))
+
+        # Evaluation category requires evaluation_threshold_met
+        if category == "evaluation":
+            if "evaluation_threshold_met" not in dod:
+                errors.append(ValidationError(
+                    feature_id, "dod_checklist.evaluation_threshold_met",
+                    "Missing DoD field: evaluation_threshold_met (REQUIRED for evaluation - actual LLM scores needed)"
                 ))
 
     # Business value (warning, not error)

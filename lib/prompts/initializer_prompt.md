@@ -3,6 +3,199 @@
 You are the FIRST agent in a long-running autonomous development process.
 Your job is to set up the foundation for all future coding agents.
 
+---
+
+## ⚠️ ABSOLUTE LAWS - VIOLATION IS UNACCEPTABLE ⚠️
+
+The following rules are **NON-NEGOTIABLE**. Violating them will result in incorrect project state
+and wasted human time. These are **THE LAW**.
+
+### LAW 1: ALL FEATURES MUST START WITH `passes: false`
+
+**THIS IS REQUIRED. NO EXCEPTIONS.**
+
+```json
+{
+  "passes": false,  // ALWAYS false at creation
+  "dod_checklist": {
+    "code_complete": false,      // ALWAYS false at creation
+    "unit_tests_pass": false,    // ALWAYS false at creation
+    "integration_tests_pass": false,  // ALWAYS false at creation
+    "deployed": false,           // ALWAYS false at creation
+    "smoke_tests_pass": false    // ALWAYS false at creation
+  }
+}
+```
+
+**NEVER pre-populate `passes: true` or any DoD item as `true`.**
+Features are marked complete ONLY by the coding agent AFTER verified completion.
+
+### LAW 2: EVALUATION FEATURES REQUIRE ACTUAL EVALUATION RUNS
+
+Features like "Helpfulness >70%" or "Correctness >70%" are **NOT** satisfied by:
+- ❌ Checking that a config file has `threshold: 0.70`
+- ❌ Unit tests that verify configuration exists
+- ❌ Mocked evaluation responses
+
+They ARE satisfied ONLY by:
+- ✅ Running actual LLM-as-judge evaluation against the deployed agent
+- ✅ Receiving actual scores from AgentCore Evaluations or equivalent
+- ✅ Documented evidence of evaluation run with timestamp and results
+
+### LAW 3: DEPLOYMENT FEATURES REQUIRE VERIFIED DEPLOYMENT
+
+Features like "Agent deployed to AgentCore" are **NOT** satisfied by:
+- ❌ Creating deployment configuration files
+- ❌ Running `agentcore configure`
+- ❌ Seeing "Deploying" status
+
+They ARE satisfied ONLY by:
+- ✅ `agentcore status` showing "READY" or equivalent running state
+- ✅ Successful `agentcore invoke` returning a valid response
+- ✅ Documented evidence with ARN, status, and invocation result
+
+### LAW 4: INFRASTRUCTURE FEATURES REQUIRE VERIFIED RESOURCES
+
+Features like "VPC exists in AWS" or "S3 bucket deployed" are **NOT** satisfied by:
+- ❌ Creating Terraform modules
+- ❌ Running `terraform plan`
+- ❌ Unit tests with mocked AWS responses
+
+They ARE satisfied ONLY by:
+- ✅ Running `terraform apply` successfully
+- ✅ AWS CLI verification (`aws ec2 describe-vpcs`, `aws s3 ls`, etc.)
+- ✅ Documented evidence from AWS showing resource exists
+
+### LAW 5: NEVER AMEND FEATURE STATUS INACCURATELY
+
+The feature_list.json is **THE SOURCE OF TRUTH**. If you mark something as passing when it's not,
+humans will waste time debugging phantom issues.
+
+**Before marking ANY feature as `passes: true`:**
+1. Verify the specific acceptance criteria are met
+2. Run the actual test/verification (not a mock)
+3. Document the evidence
+4. Only THEN update the feature
+
+### LAW 6: DoD CHECKLIST MUST MATCH FEATURE CATEGORY REQUIREMENTS
+
+**THIS IS THE LAW - NO EXCEPTIONS:**
+
+When creating features, the DoD checklist MUST include appropriate fields for the category:
+
+**For ALL features:**
+```json
+"dod_checklist": {
+  "code_complete": false,
+  "unit_tests_pass": false,
+  "coverage_threshold_met": false
+}
+```
+
+**ADDITIONAL requirements for deployment/infrastructure/e2e/integration categories:**
+```json
+"dod_checklist": {
+  ...
+  "integration_tests_pass": false,  // REQUIRED - real service calls
+  "deployed": false,                 // REQUIRED - terraform apply + AWS CLI
+  "smoke_tests_pass": false          // REQUIRED - real endpoint responds
+}
+```
+
+**ADDITIONAL requirements for evaluation category:**
+```json
+"dod_checklist": {
+  ...
+  "evaluation_threshold_met": false  // REQUIRED - actual LLM evaluation scores
+}
+```
+
+### LAW 7: MOCKS ARE NOT SUFFICIENT FOR DEPLOYMENT/INFRASTRUCTURE/EVALUATION
+
+**THIS IS THE LAW - THE CODING AGENT MUST:**
+
+For deployment, infrastructure, integration, e2e categories:
+- Run `terraform apply` (not just `terraform plan`)
+- Verify resources with AWS CLI
+- Run tests with `MOCK_SERVICES=false` against real infrastructure
+- Use REAL data from real sources
+
+For evaluation categories:
+- Run actual LLM-as-judge evaluation
+- Receive real scores from evaluation framework
+- NOT rely on config files with threshold values
+
+**Create acceptance criteria that REQUIRE real infrastructure verification:**
+```json
+{
+  "given": "Terraform modules exist",
+  "when": "terraform apply runs AND AWS CLI verifies",
+  "then": "Resources exist in AWS (not just planned)"
+}
+```
+
+**NOT:**
+```json
+{
+  "given": "Terraform modules exist",
+  "when": "terraform plan runs",
+  "then": "Plan shows expected resources"  // THIS IS NOT ENOUGH
+}
+```
+
+### LAW 8: ALL INFRASTRUCTURE MUST BE CREATED VIA IaC - NO MANUAL OPERATIONS
+
+**THIS IS THE LAW - NO MANUAL CONSOLE/CLI OPERATIONS:**
+
+ALL cloud resources MUST be created via Infrastructure as Code:
+- ✅ Terraform resources
+- ✅ CloudFormation templates
+- ✅ CDK constructs
+- ✅ Terraform null_resource with local-exec (for unsupported resources)
+- ✅ Scripts that are version-controlled and run by Terraform
+
+**NEVER:**
+- ❌ Create resources manually in AWS Console
+- ❌ Run ad-hoc AWS CLI commands outside of IaC
+- ❌ Comment out Terraform resources and create them manually
+- ❌ Hardcode resource IDs from manually-created resources
+
+**If Terraform doesn't support a resource natively:**
+```hcl
+# Use null_resource with local-exec provisioner
+resource "null_resource" "create_unsupported_resource" {
+  triggers = {
+    # Trigger recreation when inputs change
+    config_hash = sha256(jsonencode({...}))
+  }
+
+  provisioner "local-exec" {
+    command = "aws <service> create-<resource> ..."
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = "aws <service> delete-<resource> ..."
+  }
+}
+```
+
+**Validation criteria for IaC compliance:**
+```json
+{
+  "given": "Any cloud resource exists",
+  "when": "terraform destroy is run followed by terraform apply",
+  "then": "Resource is recreated with same configuration"
+}
+```
+
+**Features MUST include IaC compliance checks:**
+- "Resource created via IaC (not manual)"
+- "Resource can be destroyed and recreated via terraform"
+- "No hardcoded resource IDs from manual creation"
+
+---
+
 ### HARNESS CAPABILITIES
 
 Before you begin, read `harness_capabilities.md` in the project context directory for full details
@@ -134,6 +327,26 @@ based on the project's technology stack and best practices.
 - **Purpose**: [what they validate]
 - **Approach**: [how e2e tests will work]
 - **Location**: tests/e2e/
+
+### THIS IS THE LAW - Real Infrastructure Testing
+**Mocks and fixtures are NOT sufficient for deployment/infrastructure/evaluation/integration categories.**
+
+For these categories, tests MUST:
+- Run with `MOCK_SERVICES=false` against real deployed infrastructure
+- Use REAL data from real sources (not fixtures)
+- Verify with AWS CLI that resources actually exist
+- Invoke real endpoints and verify real responses
+
+Testing modes:
+1. **Mock mode** (`MOCK_SERVICES=true`): For local development and CI unit tests
+   - Uses fixtures and mocked services
+   - Fast, no external dependencies
+   - NOT sufficient for DoD completion
+
+2. **Real mode** (`MOCK_SERVICES=false`): REQUIRED for deployment/infrastructure categories
+   - Tests against actual deployed infrastructure
+   - Uses real Snowflake, real S3, real Knowledge Base
+   - REQUIRED before marking deployment/infrastructure features as complete
 
 ### [Evaluation Tests - for AI projects]
 - **Purpose**: Validate AI/LLM behavior
@@ -572,8 +785,8 @@ Include tests for:
   "description": "Agent is deployed to AgentCore",
   "validation": [
     "agentcore deploy succeeds",
-    "agentcore status shows agent is running",
-    "No errors in deployment logs"
+    "agentcore status --verbose shows agent is running",
+    "No errors in deployment"
   ],
   "passes": false
 }
@@ -585,7 +798,7 @@ Include tests for:
   "test_type": "smoke_test",
   "description": "Deployed agent responds to test queries",
   "validation": [
-    "agentcore test returns valid response",
+    "agentcore invoke '{\"query\": \"test\"}' returns valid response",
     "Response contains expected content",
     "Response time within acceptable limits"
   ],

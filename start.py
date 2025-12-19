@@ -28,6 +28,7 @@ from client import create_client
 
 
 # Configuration
+# DEFAULT_MODEL = "claude-opus-4-5-20251101"
 DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
 AUTO_CONTINUE_DELAY_SECONDS = 3
 
@@ -303,7 +304,15 @@ async def run_autonomous_agent(
                 )
 
         # Handle status
-        if status == "continue":
+        if status == "stop":
+            print("\n" + "=" * 70)
+            print("  PROJECT COMPLETE!")
+            print("=" * 70)
+            print("\nAll features passing (100%). Agent has finished work.")
+            print_progress_summary(project_dir)
+            break
+
+        elif status == "continue":
             print(f"\nAgent will auto-continue in {AUTO_CONTINUE_DELAY_SECONDS}s...")
             print_progress_summary(project_dir)
             await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
