@@ -3,24 +3,30 @@ Progress Tracking Utilities
 ===========================
 
 Functions for tracking and displaying progress of the autonomous coding agent.
+
+Note: feature_list.json is now stored in project_context/ (not in generations/).
+This is managed by lib/core/paths.py.
 """
 
 import json
 from pathlib import Path
 from typing import Optional
 
+from lib.core.paths import get_feature_list_path, get_project_context_dir
 
-def count_passing_tests(project_dir: Path) -> tuple[int, int]:
+
+def count_passing_tests(project_dir: Path = None) -> tuple[int, int]:
     """
     Count passing and total tests/features in feature_list.json.
 
     Args:
-        project_dir: Directory containing feature_list.json
+        project_dir: Deprecated - feature_list.json is now in project_context/
 
     Returns:
         (passing_count, total_count)
     """
-    tests_file = project_dir / "feature_list.json"
+    # feature_list.json is now in project_context/, not project_dir
+    tests_file = get_feature_list_path()
 
     if not tests_file.exists():
         return 0, 0
@@ -53,17 +59,18 @@ def count_passing_tests(project_dir: Path) -> tuple[int, int]:
         return 0, 0
 
 
-def count_by_category(project_dir: Path) -> dict[str, tuple[int, int]]:
+def count_by_category(project_dir: Path = None) -> dict[str, tuple[int, int]]:
     """
     Count passing/total tests/features by category.
 
     Args:
-        project_dir: Directory containing feature_list.json
+        project_dir: Deprecated - feature_list.json is now in project_context/
 
     Returns:
         Dict mapping category -> (passing, total)
     """
-    tests_file = project_dir / "feature_list.json"
+    # feature_list.json is now in project_context/, not project_dir
+    tests_file = get_feature_list_path()
 
     if not tests_file.exists():
         return {}
@@ -136,11 +143,16 @@ def print_progress_summary(project_dir: Path) -> None:
 class ProgressTracker:
     """
     Tracks and persists agent progress across sessions.
+
+    Note: feature_list.json is in project_context/, not the project_dir.
+    The progress file (claude-progress.txt) remains in the project_dir.
     """
 
     def __init__(self, project_dir: Path):
         self.project_dir = project_dir
         self.progress_file = project_dir / "claude-progress.txt"
+        # feature_list.json is in project_context/
+        self.feature_list_path = get_feature_list_path()
 
     def get_session_count(self) -> int:
         """Get the current session count from progress file."""
@@ -168,8 +180,8 @@ class ProgressTracker:
         return count_by_category(self.project_dir)
 
     def is_first_run(self) -> bool:
-        """Check if this is the first run (no feature_list.json)."""
-        return not (self.project_dir / "feature_list.json").exists()
+        """Check if this is the first run (no feature_list.json in project_context/)."""
+        return not self.feature_list_path.exists()
 
     def update_progress(self, session_num: int, status: str, notes: str = "") -> None:
         """

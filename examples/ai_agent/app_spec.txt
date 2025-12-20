@@ -1,0 +1,293 @@
+<project_specification>
+
+<project_name>SupportBot - AI Customer Support Agent</project_name>
+
+<overview>
+An AI-powered customer support agent built on AWS Bedrock with Slack integration.
+The agent can answer customer questions using a knowledge base, create support tickets,
+escalate issues to human agents, and provide personalized responses based on customer
+context. Uses RAG (Retrieval Augmented Generation) for accurate, grounded responses.
+</overview>
+
+<user_personas>
+1. Customer - Asks questions via Slack
+2. Support Agent - Reviews escalations and complex issues
+3. Administrator - Configures knowledge base and monitors performance
+</user_personas>
+
+<technology_stack>
+<languages>
+- Python 3.12
+- HCL (Terraform)
+</languages>
+
+<ai_framework>
+- AWS Bedrock for LLM inference
+- Claude Sonnet 4.5 as main agent model
+- Claude Haiku 3.0 for classification
+- Amazon Titan Embeddings for vector search
+- Strands Agents SDK for agent framework
+</ai_framework>
+
+<integrations>
+- Slack Bolt for messaging
+- AWS S3 for document storage
+- AWS S3 Vectors for vector search
+- Amazon Bedrock Knowledge Base for RAG
+</integrations>
+
+<infrastructure>
+- AWS Bedrock AgentCore Runtime
+- Terraform for IaC
+- AWS Lambda for event handlers
+- AWS EventBridge for scheduling
+- CloudWatch for observability
+</infrastructure>
+
+<testing>
+- pytest + pytest-asyncio
+- AgentCore Evaluations framework
+- DeepEval for agent metrics
+- Mock services for unit tests
+</testing>
+</technology_stack>
+
+<agent_capabilities>
+<core_capabilities>
+1. Answer questions from knowledge base
+2. Create support tickets in ticketing system
+3. Escalate complex issues to human agents
+4. Provide product information and pricing
+5. Handle common troubleshooting scenarios
+6. Track conversation context
+7. Personalize responses based on customer history
+8. Handle multi-turn conversations
+9. Graceful fallback when uncertain
+10. Maintain professional, helpful tone
+</core_capabilities>
+
+<tools>
+1. knowledge_base_search - Query knowledge base for relevant articles
+2. create_ticket - Create a support ticket
+3. get_customer_info - Retrieve customer account details
+4. escalate_to_human - Transfer to human support agent
+5. check_order_status - Look up order information
+6. update_account - Update customer account settings
+</tools>
+
+<guardrails>
+- No discussion of competitor products
+- No disclosure of internal processes
+- No promises about timelines or guarantees
+- Professional language only
+- PII handling compliance
+- Escalation on sensitive topics (legal, security)
+</guardrails>
+</agent_capabilities>
+
+<knowledge_base>
+<sources>
+- Product documentation
+- FAQ articles
+- Troubleshooting guides
+- Policy documents
+- Pricing information
+</sources>
+
+<structure>
+- Chunked documents (500 tokens max)
+- Metadata for filtering (category, product, date)
+- Regular sync from source systems
+</structure>
+</knowledge_base>
+
+<testing_strategy>
+<unit_tests>
+- Tool function implementations
+- Prompt template generation
+- Response parsing
+- Error handling
+- Coverage target: 85%
+</unit_tests>
+
+<integration_tests>
+- Knowledge base retrieval
+- Slack message handling
+- Ticket creation workflow
+- Multi-tool scenarios
+</integration_tests>
+
+<e2e_tests>
+- Complete conversation flows
+- Escalation scenarios
+- Error recovery
+- Context persistence
+</e2e_tests>
+
+<evaluation_tests>
+Agent evaluation using LLM-as-judge metrics:
+
+Metric: Helpfulness (threshold: 80%)
+- Does the response address the user's question?
+- Is the information accurate and complete?
+- Is the tone appropriate and professional?
+
+Metric: Correctness (threshold: 75%)
+- Are facts stated correctly?
+- Does the response match knowledge base content?
+- Are tool calls appropriate for the request?
+
+Metric: Safety (threshold: 99%)
+- No harmful or inappropriate content
+- Guardrails are respected
+- PII is handled correctly
+
+Metric: Tool Selection (threshold: 85%)
+- Correct tool chosen for the task
+- Tool parameters are valid
+- No unnecessary tool calls
+
+Metric: Goal Achievement (threshold: 80%)
+- User's request is fulfilled
+- Conversation reaches resolution
+- Appropriate escalation when needed
+</evaluation_tests>
+
+<smoke_tests>
+- Agent responds to basic greeting
+- Knowledge base search returns results
+- Ticket creation succeeds
+- Slack integration works
+</smoke_tests>
+</testing_strategy>
+
+<test_data>
+<fixtures>
+- 30+ knowledge base articles
+- 50+ sample customer queries
+- 20+ customer profiles
+- Expected responses for evaluation
+</fixtures>
+
+<evaluation_test_cases>
+200+ test cases covering:
+- Simple factual questions (50 cases)
+- Complex multi-part questions (30 cases)
+- Troubleshooting scenarios (40 cases)
+- Ticket creation requests (20 cases)
+- Escalation scenarios (20 cases)
+- Edge cases and error handling (20 cases)
+- Guardrail violation attempts (20 cases)
+</evaluation_test_cases>
+</test_data>
+
+<infrastructure>
+<aws_resources>
+- Bedrock AgentCore Runtime
+- Bedrock Knowledge Base
+- S3 Vectors bucket
+- S3 documents bucket
+- Lambda for data ingestion
+- EventBridge for scheduling
+- CloudWatch logs and metrics
+- Secrets Manager for API keys
+- Bedrock Guardrails
+</aws_resources>
+
+<terraform_modules>
+- bedrock-kb (Knowledge Base + S3 Vectors)
+- agentcore-runtime (Agent deployment)
+- guardrails (Content filtering)
+- data-pipeline (Lambda + EventBridge)
+- observability (CloudWatch)
+- secrets (Secrets Manager)
+</terraform_modules>
+
+<environments>
+- dev (minimal resources, mock data)
+- staging (production-like, test data)
+- prod (full resources, real data)
+</environments>
+</infrastructure>
+
+<ci_cd_pipeline>
+<stages>
+1. Lint and type check
+2. Run unit tests with mocks
+3. Run integration tests
+4. Terraform plan
+5. Deploy agent to dev
+6. Run smoke tests
+7. Run evaluation test suite
+8. Check evaluation thresholds
+9. Deploy to staging
+10. Run full E2E tests
+11. Manual approval for prod
+12. Deploy to production
+13. Run production smoke tests
+</stages>
+
+<quality_gates>
+- All unit tests pass
+- Evaluation: helpfulness >= 80%
+- Evaluation: correctness >= 75%
+- Evaluation: safety >= 99%
+- Evaluation: tool_selection >= 85%
+- Smoke tests pass
+</quality_gates>
+</ci_cd_pipeline>
+
+<observability>
+<metrics>
+- Response latency (p50, p95, p99)
+- Token usage per request
+- Knowledge base hit rate
+- Escalation rate
+- Customer satisfaction score
+- Error rate by type
+</metrics>
+
+<logging>
+- All agent interactions
+- Tool calls and results
+- Evaluation scores
+- Errors and exceptions
+</logging>
+
+<alerts>
+- High error rate (> 5%)
+- Latency spike (p95 > 5s)
+- Low evaluation scores
+- Unusual escalation patterns
+</alerts>
+</observability>
+
+<evaluation_criteria>
+<functional>
+- Answers are grounded in knowledge base
+- Tools are called correctly
+- Escalations happen appropriately
+- Guardrails prevent violations
+</functional>
+
+<performance>
+- Response latency < 3s (p95)
+- Knowledge base retrieval < 500ms
+- Token efficiency (minimal unnecessary tokens)
+</performance>
+
+<reliability>
+- 99.9% uptime target
+- Graceful degradation on errors
+- Consistent response quality
+</reliability>
+
+<security>
+- No data leakage
+- API keys properly secured
+- Audit logging enabled
+- PII handling compliant
+</security>
+</evaluation_criteria>
+
+</project_specification>

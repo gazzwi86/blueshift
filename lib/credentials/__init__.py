@@ -1,29 +1,36 @@
 """
-Credential Validation Framework
+Credential Management
+=====================
 
-Validates that required credentials are available before agent execution begins.
-Supports multiple credential sources and fail-fast behavior.
+Load and validate credentials for the Blueshift harness.
 
-Usage:
-    from lib.credentials import CredentialValidator, CredentialSpec
+This module handles GENERIC harness credentials only:
+- AWS (access keys or profile)
+- Anthropic API key
+- Slack (optional)
+- GitHub (optional)
+- Context7 (optional)
 
-    validator = CredentialValidator()
-
-    # Define required credentials
-    validator.require("AWS_ACCESS_KEY_ID", source="env", required=True)
-    validator.require("SLACK_BOT_TOKEN", source="env", required=False)  # Optional
-
-    # Validate all
-    result = validator.validate()
-    if not result.valid:
-        print(f"Missing: {result.missing}")
-        sys.exit(1)
+Project-specific credentials (Snowflake, SharePoint, etc.) should be
+defined in your project's configuration, not here.
 """
 
-from .validator import CredentialValidator, CredentialSpec, ValidationResult
+from .types import HarnessCredentials
+from .loader import load_env_file, get_credentials
+from .validator import validate_credentials, check_aws, check_slack, check_github
+from .mcp_env import get_env_for_mcp_servers
 
 __all__ = [
-    "CredentialValidator",
-    "CredentialSpec",
-    "ValidationResult",
+    # Types
+    "HarnessCredentials",
+    # Loader
+    "load_env_file",
+    "get_credentials",
+    # Validator
+    "validate_credentials",
+    "check_aws",
+    "check_slack",
+    "check_github",
+    # MCP
+    "get_env_for_mcp_servers",
 ]

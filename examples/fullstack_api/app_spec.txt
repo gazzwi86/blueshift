@@ -1,0 +1,236 @@
+<project_specification>
+
+<project_name>BookShelf API - Library Management System</project_name>
+
+<overview>
+A full-stack library management system with a React frontend, FastAPI backend, and PostgreSQL
+database. Features include book catalog management, user authentication, borrowing system,
+and search functionality. Deployed on AWS with infrastructure as code using Terraform.
+</overview>
+
+<user_personas>
+1. Librarian - Manages book inventory and user accounts
+2. Library Member - Browses and borrows books
+3. Administrator - System configuration and reporting
+</user_personas>
+
+<technology_stack>
+<languages>
+- Python 3.12 (backend)
+- TypeScript 5.x (frontend)
+- SQL (database)
+- HCL (Terraform)
+</languages>
+
+<backend>
+- FastAPI with async support
+- SQLAlchemy 2.x ORM
+- Pydantic v2 for validation
+- Alembic for migrations
+- JWT authentication
+- Redis for caching
+</backend>
+
+<frontend>
+- React 18.x with TypeScript
+- TanStack Query for data fetching
+- React Router for navigation
+- TailwindCSS for styling
+- Zod for form validation
+</frontend>
+
+<database>
+- PostgreSQL 15.x
+- Redis 7.x for caching/sessions
+</database>
+
+<infrastructure>
+- AWS (ECS, RDS, ElastiCache, ALB)
+- Terraform for IaC
+- Docker for containerization
+- GitHub Actions for CI/CD
+</infrastructure>
+
+<testing>
+- pytest + pytest-asyncio (backend)
+- Vitest + React Testing Library (frontend)
+- Playwright for E2E
+- Testcontainers for integration tests
+</testing>
+</technology_stack>
+
+<features>
+<core_features>
+1. User authentication (signup/login/logout)
+2. Book catalog with CRUD operations
+3. Search by title, author, ISBN, genre
+4. Book borrowing and return system
+5. Due date tracking and overdue notifications
+6. User profile management
+7. Reservation system
+8. Admin dashboard with analytics
+9. API documentation (OpenAPI/Swagger)
+10. Rate limiting and API security
+</core_features>
+
+<api_endpoints>
+POST /auth/register
+POST /auth/login
+POST /auth/refresh
+GET /auth/me
+
+GET /books
+GET /books/{id}
+POST /books (admin)
+PUT /books/{id} (admin)
+DELETE /books/{id} (admin)
+GET /books/search?q=
+
+GET /users (admin)
+GET /users/{id}
+PUT /users/{id}
+
+POST /borrow/{book_id}
+POST /return/{book_id}
+GET /borrow/history
+GET /borrow/current
+
+GET /reservations
+POST /reservations/{book_id}
+DELETE /reservations/{id}
+</api_endpoints>
+</features>
+
+<data_model>
+<tables>
+- users (id, email, password_hash, name, role, created_at)
+- books (id, title, author, isbn, genre, copies_total, copies_available)
+- borrowings (id, user_id, book_id, borrowed_at, due_at, returned_at)
+- reservations (id, user_id, book_id, created_at, expires_at)
+</tables>
+</data_model>
+
+<testing_strategy>
+<unit_tests>
+- API endpoint handlers
+- Business logic services
+- Data validation
+- Authentication middleware
+- Frontend components
+- Coverage target: 85%
+</unit_tests>
+
+<integration_tests>
+- Database operations with real PostgreSQL (Testcontainers)
+- Redis caching behavior
+- Full API request/response cycles
+- Authentication flows
+</integration_tests>
+
+<e2e_tests>
+- User registration and login
+- Book search and filtering
+- Borrowing workflow (search -> borrow -> return)
+- Admin book management
+- Overdue notification flow
+</e2e_tests>
+
+<smoke_tests>
+- Health check endpoint responds
+- Database connection works
+- Redis connection works
+- Authentication endpoint works
+- Core API endpoints respond
+</smoke_tests>
+</testing_strategy>
+
+<test_data>
+<fixtures>
+- 50+ sample books with varied genres
+- 10+ user accounts (member, admin)
+- Borrowing history data
+- Overdue scenarios
+</fixtures>
+</test_data>
+
+<infrastructure>
+<aws_resources>
+- VPC with public/private subnets
+- ECS Fargate for containers
+- RDS PostgreSQL (db.t3.micro for dev)
+- ElastiCache Redis (cache.t3.micro)
+- Application Load Balancer
+- S3 for static assets
+- CloudWatch for logging
+- Secrets Manager for credentials
+</aws_resources>
+
+<terraform_modules>
+- networking (VPC, subnets, security groups)
+- database (RDS PostgreSQL)
+- cache (ElastiCache Redis)
+- compute (ECS Fargate service)
+- loadbalancer (ALB, target groups)
+- storage (S3 buckets)
+- secrets (Secrets Manager)
+</terraform_modules>
+
+<environments>
+- dev (minimal resources)
+- staging (production-like)
+- prod (full resources)
+</environments>
+</infrastructure>
+
+<ci_cd_pipeline>
+<stages>
+1. Lint and type check (Python + TypeScript)
+2. Run unit tests
+3. Build Docker images
+4. Run integration tests (Testcontainers)
+5. Terraform plan
+6. Deploy to staging
+7. Run smoke tests
+8. Run E2E tests against staging
+9. Manual approval for prod
+10. Deploy to production
+11. Run production smoke tests
+</stages>
+
+<github_actions>
+- On PR: lint, test, plan
+- On merge to main: deploy to staging
+- On release tag: deploy to production
+</github_actions>
+</ci_cd_pipeline>
+
+<evaluation_criteria>
+<functional>
+- All API endpoints return correct responses
+- Authentication works correctly
+- Borrowing system handles edge cases
+- Search returns relevant results
+</functional>
+
+<performance>
+- API response time < 200ms (p95)
+- Database query time < 50ms
+- Cache hit rate > 80%
+</performance>
+
+<security>
+- No SQL injection vulnerabilities
+- JWT tokens properly validated
+- Passwords properly hashed
+- Rate limiting enforced
+</security>
+
+<reliability>
+- 99.9% uptime target
+- Graceful error handling
+- Health check endpoint
+- Zero-downtime deployments
+</reliability>
+</evaluation_criteria>
+
+</project_specification>

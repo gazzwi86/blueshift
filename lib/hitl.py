@@ -4,6 +4,9 @@ Human-in-the-Loop (HITL) Checkpoint System
 Provides interactive CLI-based checkpoints where the agent pauses execution
 and waits for human approval, denial, or feedback before proceeding.
 
+Note: HITL history is stored in project_context/hitl_history.json (not in generations/).
+This is managed by lib/core/paths.py.
+
 Usage:
     from lib.hitl import HITLCheckpoint, HITLResponse
 
@@ -40,6 +43,8 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Optional
+
+from lib.core.paths import get_hitl_history_path
 
 
 class HITLDecision(Enum):
@@ -240,10 +245,13 @@ class HITLManager:
     - Registering checkpoints
     - Checking if checkpoints are needed
     - Recording checkpoint history
+
+    Note: HITL history is stored in project_context/hitl_history.json
     """
 
     def __init__(self, history_file: Optional[Path] = None):
-        self.history_file = history_file or Path("hitl_history.json")
+        # Use centralized path for HITL history
+        self.history_file = history_file or get_hitl_history_path()
         self.checkpoints: list[dict] = []
         self._load_history()
 

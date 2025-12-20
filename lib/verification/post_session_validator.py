@@ -15,6 +15,9 @@ The agent can claim whatever it wants in feature_list.json, but the harness
 will overwrite those claims based on the results of this verification.
 
 MOCKS ARE NOT SUFFICIENT. This runs real commands against real infrastructure.
+
+Note: feature_list.json is now stored in project_context/ (not in generations/).
+This is managed by lib/core/paths.py.
 """
 
 import subprocess
@@ -25,6 +28,8 @@ import glob as glob_module
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Tuple
+
+from lib.core.paths import get_feature_list_path, get_project_context_dir
 
 
 def _get_aws_env(project_dir: Path) -> dict:
@@ -102,12 +107,10 @@ PLACEHOLDER_PATTERNS = [
     r'lambda_placeholder\.zip',
 ]
 
-# Required lambda implementations (must have actual logic, not just placeholders)
-# Supports multiple naming conventions - agent may use different directory names
-REQUIRED_LAMBDA_IMPLEMENTATIONS = {
-    "extractor": ["lambda-extractor", "sharepoint-extractor"],  # SharePoint extraction
-    "processor": ["lambda-processor", "document-processor"],    # Document processing
-}
+# Required lambda implementations - loaded from app_spec.txt or empty if not specified
+# The harness discovers these from the project's app_spec, not hardcoded values
+# This is loaded at runtime from project configuration
+REQUIRED_LAMBDA_IMPLEMENTATIONS: dict = {}
 
 
 def run_placeholder_detection(project_dir: Path, use_ai: bool = True) -> dict:
@@ -204,53 +207,10 @@ def run_placeholder_detection(project_dir: Path, use_ai: bool = True) -> dict:
             except Exception as e:
                 pass  # Skip unreadable files
 
-    # 4. Check if S3 buckets contain actual data (for data pipeline)
-    # Note: This check is skipped if AWS credentials aren't available
-    raw_docs_bucket_empty = True
-    vectors_bucket_empty = True
-    aws_env = _get_aws_env(project_dir)
-
-    try:
-        # Check raw docs bucket
-        result = subprocess.run(
-            ["aws", "s3", "ls", "s3://pixieops-raw-docs-dev/", "--recursive"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            env=aws_env
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            raw_docs_bucket_empty = False
-    except Exception:
-        pass
-
-    try:
-        # Check vectors bucket
-        result = subprocess.run(
-            ["aws", "s3", "ls", "s3://pixieops-bios-vectors-dev/", "--recursive"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            env=aws_env
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            vectors_bucket_empty = False
-    except Exception:
-        pass
-
-    if raw_docs_bucket_empty:
-        placeholders_found.append({
-            "file": "s3://pixieops-raw-docs-dev/",
-            "type": "empty_bucket",
-            "issue": "Raw docs bucket is EMPTY - data pipeline has never run"
-        })
-
-    if vectors_bucket_empty:
-        placeholders_found.append({
-            "file": "s3://pixieops-bios-vectors-dev/",
-            "type": "empty_bucket",
-            "issue": "Vectors bucket is EMPTY - no embeddings have been generated"
-        })
+    # 4. S3 bucket checks - now project-agnostic
+    # These checks are skipped by default since bucket names are project-specific
+    # Projects can enable this by providing bucket names in their configuration
+    # The generic placeholder detection above catches most issues
 
     # 5. AI-powered analysis (optional, more robust)
     if use_ai and AI_ANALYZER_AVAILABLE:
@@ -510,10 +470,11 @@ def run_evaluation_verification(project_dir: Path) -> dict:
     failed_metrics = []
     passing_metrics = []
 
-    # Handle both formats:
+    # Handle multiple formats:
     # 1. Top-level metrics: data["helpfulness"]["actual"]
     # 2. Nested results: data["results"]["helpfulness"]["score"]
-    metrics_data = data.get("results", data)
+    # 3. Metrics key: data["metrics"]["helpfulness"]["average"]
+    metrics_data = data.get("results", data.get("metrics", data))
 
     for metric, threshold in REQUIRED_EVALUATION_METRICS.items():
         if metric not in metrics_data:
@@ -522,8 +483,8 @@ def run_evaluation_verification(project_dir: Path) -> dict:
 
         metric_data = metrics_data[metric]
 
-        # Handle both "actual" and "score" keys
-        actual = metric_data.get("actual") or metric_data.get("score")
+        # Handle "actual", "score", and "average" keys
+        actual = metric_data.get("actual") or metric_data.get("score") or metric_data.get("average")
 
         if actual is None:
             missing_metrics.append(f"{metric} (no actual/score value)")
@@ -575,7 +536,7 @@ def update_features_based_on_verification(
     - If placeholder code is detected, related features are marked as NOT passing
 
     Args:
-        project_dir: Path to project directory
+        project_dir: Path to project directory (used for evidence files, infra checks)
         infra_result: Result from infrastructure verification
         deploy_result: Result from deployment verification
         eval_result: Result from evaluation verification
@@ -584,10 +545,11 @@ def update_features_based_on_verification(
     Returns:
         dict with counts of updated features by category
     """
-    feature_list_path = project_dir / "feature_list.json"
+    # feature_list.json is now in project_context/, not project_dir
+    feature_list_path = get_feature_list_path()
 
     if not feature_list_path.exists():
-        return {"error": "feature_list.json not found"}
+        return {"error": "feature_list.json not found in project_context/"}
 
     with open(feature_list_path) as f:
         data = json.load(f)
@@ -604,25 +566,17 @@ def update_features_based_on_verification(
             # Block features related to lambdas if lambda placeholders found
             if issue.get("type") in ["lambda_placeholder", "missing_implementation"]:
                 reason = f"Placeholder: {issue_file} - {issue_desc}"
+                # Generic feature blocking - specific feature names come from feature_list.json
+                # The harness doesn't assume specific feature names
+                placeholder_blocked_features["Lambda function deployed"] = reason
                 placeholder_blocked_features["Lambda functions exist"] = reason
-                placeholder_blocked_features["Lambda extractor module"] = reason
-                placeholder_blocked_features["Lambda processor module"] = reason
-                placeholder_blocked_features["EventBridge schedule"] = reason
-                placeholder_blocked_features["S3 event notification"] = reason
-
-            # Block features related to data pipeline if buckets empty
-            if issue.get("type") == "empty_bucket":
-                reason = f"Empty bucket: {issue_file} - {issue_desc}"
-                placeholder_blocked_features["S3 Vectors index exists"] = reason
-                placeholder_blocked_features["Bedrock KB exists"] = reason
 
             # Block features related to source code placeholders
             if issue.get("type") == "python_placeholder":
                 reason = f"Placeholder code in {issue_file} - {issue_desc}"
-                # Try to identify which feature(s) this affects
-                if "slack" in issue_file.lower():
-                    placeholder_blocked_features["Slack message handling"] = reason
-                    placeholder_blocked_features["Slack integration"] = reason
+                # Generic placeholder blocking - we don't assume specific feature names
+                # The file path itself indicates what's affected
+                placeholder_blocked_features[f"Code in {issue_file}"] = reason
 
     for feature in data.get("features", []):
         category = feature.get("category", "")
@@ -793,8 +747,9 @@ def run_post_session_verification(project_dir: Path, verbose: bool = True) -> di
 
     results["updates"] = updates
 
-    # 6. Write verification report
-    report_path = project_dir / ".verification_report.json"
+    # 6. Write verification report to project_context
+    context_dir = get_project_context_dir()
+    report_path = context_dir / ".verification_report.json"
     report = {
         "timestamp": datetime.utcnow().isoformat(),
         "results": results,

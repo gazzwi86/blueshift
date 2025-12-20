@@ -3,6 +3,9 @@ Agent Session Logic
 ===================
 
 Core agent interaction functions for running autonomous coding sessions.
+
+Note: feature_list.json is now stored in project_context/ (not in generations/).
+This is managed by lib/core/paths.py.
 """
 
 import asyncio
@@ -14,6 +17,7 @@ from claude_code_sdk import ClaudeSDKClient
 
 from .logger import SessionLogger
 from ..verification.post_session_validator import run_post_session_verification
+from ..core.paths import get_feature_list_path, get_project_context_dir
 
 
 # Configuration
@@ -89,7 +93,7 @@ def check_feature_truly_complete(feature: dict) -> tuple[bool, list[str]]:
     return len(missing) == 0, missing
 
 
-def check_project_complete(project_dir: Path) -> bool:
+def check_project_complete(project_dir: Path = None) -> bool:
     """
     Check if project is GENUINELY complete.
 
@@ -103,12 +107,15 @@ def check_project_complete(project_dir: Path) -> bool:
     This prevents premature completion claims.
 
     Args:
-        project_dir: Path to the project directory
+        project_dir: Deprecated - feature_list.json is now in project_context/
 
     Returns:
         True if ALL features are genuinely complete, False otherwise
     """
-    feature_list = project_dir / "feature_list.json"
+    # feature_list.json is now in project_context/, not project_dir
+    feature_list = get_feature_list_path()
+    # Reports still go to project_context/
+    context_dir = get_project_context_dir()
 
     if not feature_list.exists():
         return False
@@ -137,8 +144,8 @@ def check_project_complete(project_dir: Path) -> bool:
 
         # Log incomplete features for debugging
         if incomplete_features:
-            # Write detailed report to project directory
-            report_path = project_dir / ".completion_check_report.json"
+            # Write detailed report to project_context directory
+            report_path = context_dir / ".completion_check_report.json"
             report = {
                 "total_features": total,
                 "incomplete_count": len(incomplete_features),
@@ -157,7 +164,7 @@ def check_project_complete(project_dir: Path) -> bool:
 
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         # Log the error
-        error_path = project_dir / ".completion_check_error.txt"
+        error_path = context_dir / ".completion_check_error.txt"
         error_path.write_text(f"Error checking completion: {e}")
         return False
 

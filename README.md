@@ -95,6 +95,22 @@ python preflight.py
 python start.py --project-dir ./my_project
 ```
 
+### Example App Specifications
+
+The harness includes example app specifications for different project types:
+
+| Example | Description |
+|---------|-------------|
+| `examples/simple_frontend/` | React/Vue SPA with Vitest, Playwright, GitHub Actions |
+| `examples/fullstack_api/` | FastAPI + React + PostgreSQL + Terraform + AWS ECS |
+| `examples/ai_agent/` | Bedrock AgentCore + Slack + RAG with LLM-as-judge evaluation |
+
+To use an example, copy its `app_spec.txt` to `project_context/`:
+
+```bash
+cp examples/ai_agent/app_spec.txt project_context/app_spec.txt
+```
+
 ## Architecture
 
 The harness separates **generic reusable code** from **project-specific configuration**:
@@ -103,7 +119,20 @@ The harness separates **generic reusable code** from **project-specific configur
 blueshift/
 │
 ├── lib/                              # REUSABLE LIBRARY (generic)
-│   ├── hitl.py                       # Human-in-the-loop checkpoint system
+│   ├── core/                         # Core utilities
+│   │   ├── paths.py                  # Centralized path management
+│   │   └── types.py                  # Shared types and dataclasses
+│   │
+│   ├── hitl/                         # Human-in-the-loop checkpoint system
+│   │   ├── types.py                  # HITLDecision, HITLResponse
+│   │   ├── checkpoint.py             # HITLCheckpoint class
+│   │   └── manager.py                # HITLManager for history
+│   │
+│   ├── credentials/                  # Credential management (functional)
+│   │   ├── types.py                  # HarnessCredentials dataclass
+│   │   ├── loader.py                 # Load from .env
+│   │   ├── validator.py              # Composable validation checks
+│   │   └── mcp_env.py                # MCP server environment
 │   │
 │   ├── prompts/                      # Generic prompt templates
 │   │   ├── __init__.py               # PromptLoader with combination logic
@@ -115,40 +144,63 @@ blueshift/
 │   │   └── test_security.py          # Security tests
 │   │
 │   ├── evaluation/                   # Agent evaluation framework
-│   │   ├── harness.py                # EvaluationHarness, DeepEval integration
+│   │   ├── harness.py                # EvaluationHarness
 │   │   └── evaluators/base.py        # BaseEvaluator, LLMJudgeEvaluator
 │   │
-│   ├── infrastructure/               # Infrastructure validation
-│   │   ├── terraform.py              # TerraformValidator
-│   │   └── aws.py                    # AWSResourceChecker
+│   ├── verification/                 # Post-session verification
+│   │   └── post_session_validator.py # Infrastructure/deployment verification
 │   │
-│   ├── credentials/                  # Credential validation
-│   │   └── validator.py              # CredentialValidator
+│   ├── validation/                   # Schema and DoD validation
+│   │   ├── feature_schema.py         # Feature list schema validation
+│   │   ├── dod_validator.py          # Definition of Done validation
+│   │   └── feature_sync.py           # Sync features with app_spec
 │   │
 │   ├── progress/                     # Progress tracking
 │   │   └── tracker.py                # ProgressTracker
 │   │
+│   ├── runner/                       # Agent runner utilities
+│   │   ├── autonomous.py             # run_autonomous_agent()
+│   │   └── setup.py                  # Project setup (git init, etc.)
+│   │
 │   └── orchestrator/                 # Session management
 │       ├── session.py                # run_agent_session()
 │       └── logger.py                 # SessionLogger for debugging
+│
+├── config/                           # Configuration
+│   └── security_allowlist.py         # Command security rules
 │
 ├── project_context/                  # PROJECT-SPECIFIC CONTEXT
 │   ├── app_spec.txt                  # Project specification (required)
 │   ├── harness_capabilities.md       # Available tools/MCP servers (required)
 │   ├── workflow_template.md          # Phase templates (required)
 │   ├── stage_gates.md                # HITL trigger definitions (required)
+│   ├── feature_list.json             # Generated feature registry (created by agent)
+│   ├── hitl_history.json             # HITL checkpoint history
 │   ├── init_additions.md             # Optional: extra initializer instructions
-│   └── coding_additions.md           # Optional: extra coding instructions
+│   ├── coding_additions.md           # Optional: extra coding instructions
+│   └── logs/                         # Session transcripts
+│
+├── examples/                         # Sample app specifications
+│   ├── simple_frontend/              # React/Vue SPA example
+│   │   └── app_spec.txt
+│   ├── fullstack_api/                # FastAPI + React + Terraform example
+│   │   └── app_spec.txt
+│   └── ai_agent/                     # Bedrock AgentCore example
+│       └── app_spec.txt
 │
 ├── generations/                      # GENERATED PROJECTS (gitignored)
 │   └── my_project/                   # Each project has its own git repo
 │       ├── .git/                     # Separate from harness git
-│       ├── feature_list.json         # Test cases (source of truth)
-│       ├── testing_strategy.md       # Testing approach for this project
-│       ├── workflow_phases.md        # Phases for this project
+│       ├── src/                      # Generated source code
+│       ├── tests/                    # Generated tests
+│       ├── infra/                    # Generated infrastructure
 │       ├── claude-progress.txt       # Session handoff notes
-│       ├── logs/                     # Session transcripts
 │       └── ...
+│
+├── tests/                            # Harness test suite
+│   ├── unit/                         # Unit tests
+│   ├── integration/                  # Integration tests
+│   └── e2e/                          # End-to-end tests
 │
 ├── start.py                          # Entry point
 ├── preflight.py                      # Pre-run verification
@@ -157,6 +209,7 @@ blueshift/
 ├── client.py                         # Project-specific MCP config
 │
 ├── .env.example                      # Environment template
+├── pytest.ini                        # Test configuration
 └── pyproject.toml                    # Python dependencies
 ```
 
@@ -165,8 +218,11 @@ blueshift/
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | **Generic Prompts** | `lib/prompts/` | Reusable templates with few-shot examples |
-| **Project Context** | `project_context/` | Project-specific specification and capabilities |
+| **Core Utilities** | `lib/core/` | Centralized path management and shared types |
+| **Project Context** | `project_context/` | Project-specific specification, feature list, and HITL history |
+| **Examples** | `examples/` | Sample app specifications for different project types |
 | **Generated Projects** | `generations/` | Output projects with their own git repos |
+| **Tests** | `tests/` | Unit, integration, and e2e tests for the harness |
 | **Project Config** | Root (`security.py`, `credentials.py`, `client.py`) | Project-specific configuration |
 
 ### Prompt Loading
@@ -287,12 +343,13 @@ The harness implements a **phase-driven development workflow**:
 
 ### Key Artifacts
 
-| Artifact | Purpose |
-|----------|---------|
-| `feature_list.json` | Source of truth - test cases, `passes: false → true` |
-| `testing_strategy.md` | Testing approach for this project's tech stack |
-| `workflow_phases.md` | Current phase and exit criteria |
-| `claude-progress.txt` | Session handoff notes between context windows |
+| Artifact | Location | Purpose |
+|----------|----------|---------|
+| `feature_list.json` | `project_context/` | Source of truth - test cases, `passes: false → true` |
+| `hitl_history.json` | `project_context/` | History of HITL checkpoint decisions |
+| `testing_strategy.md` | `generations/<project>/` | Testing approach for this project's tech stack |
+| `workflow_phases.md` | `generations/<project>/` | Current phase and exit criteria |
+| `claude-progress.txt` | `generations/<project>/` | Session handoff notes between context windows |
 
 ### Stage Gates
 
@@ -372,7 +429,7 @@ python validate_spec.py path/to/app_spec.txt      # Custom path
 After Session 1 completes (at HITL checkpoint), validate the generated artifacts:
 
 ```bash
-python post_init_validation.py generations/pixieops_v2
+python post_init_validation.py generations/my_project
 ```
 
 This checks:
@@ -390,7 +447,7 @@ This checks:
 Validate feature_list.json against the enhanced schema:
 
 ```bash
-python -m lib.validation.feature_schema generations/pixieops_v2/feature_list.json
+python -m lib.validation.feature_schema project_context/feature_list.json
 ```
 
 ### Security Tests

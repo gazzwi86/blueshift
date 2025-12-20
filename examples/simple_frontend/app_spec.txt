@@ -1,0 +1,145 @@
+<project_specification>
+
+<project_name>TaskFlow - Modern Task Management App</project_name>
+
+<overview>
+A modern, responsive task management single-page application built with React and TypeScript.
+Features include task creation, categorization, due dates, priority levels, and drag-and-drop
+organization. The app uses local storage for persistence with optional cloud sync capabilities.
+</overview>
+
+<user_personas>
+1. Individual User - Personal task management
+2. Small Team Lead - Coordinating team tasks
+3. Freelancer - Managing multiple project tasks
+</user_personas>
+
+<technology_stack>
+<languages>
+- TypeScript 5.x
+</languages>
+
+<frontend>
+- React 18.x with hooks
+- Vite as build tool
+- TailwindCSS for styling
+- React Query for state management
+- React DnD for drag-and-drop
+- date-fns for date handling
+</frontend>
+
+<testing>
+- Vitest for unit tests
+- React Testing Library for component tests
+- Playwright for E2E tests
+- MSW (Mock Service Worker) for API mocking
+</testing>
+
+<ci_cd>
+- GitHub Actions for CI/CD
+- Vercel/Netlify for deployment
+- Automated testing on PR
+- Preview deployments for branches
+</ci_cd>
+</technology_stack>
+
+<features>
+<core_features>
+1. Task CRUD operations
+2. Task categorization with tags
+3. Priority levels (Low, Medium, High, Critical)
+4. Due date assignment with reminders
+5. Drag-and-drop task reordering
+6. Search and filter functionality
+7. Dark/Light theme toggle
+8. Keyboard shortcuts
+9. Responsive mobile design
+10. Local storage persistence
+</core_features>
+
+<optional_features>
+1. Cloud sync (future)
+2. Collaborative sharing (future)
+3. Recurring tasks (future)
+</optional_features>
+</features>
+
+<testing_strategy>
+<unit_tests>
+- Component rendering tests
+- Hook behavior tests
+- Utility function tests
+- State management tests
+- Coverage target: 80%
+</unit_tests>
+
+<integration_tests>
+- Component interaction tests
+- Form submission flows
+- Drag-and-drop interactions
+- Local storage operations
+</integration_tests>
+
+<e2e_tests>
+- Complete task creation flow
+- Task filtering and search
+- Theme switching
+- Mobile responsive behavior
+- Keyboard navigation
+</e2e_tests>
+
+<smoke_tests>
+- App loads successfully
+- Core navigation works
+- Task creation succeeds
+</smoke_tests>
+</testing_strategy>
+
+<test_data>
+<fixtures>
+- 20+ sample tasks with varied priorities
+- Multiple categories/tags
+- Tasks with different due dates
+- Completed and incomplete tasks
+</fixtures>
+</test_data>
+
+<evaluation_criteria>
+<functional>
+- All CRUD operations work correctly
+- Drag-and-drop is smooth and accurate
+- Filters return correct results
+- Theme persists across sessions
+</functional>
+
+<performance>
+- First Contentful Paint < 1.5s
+- Time to Interactive < 3s
+- Smooth 60fps animations
+</performance>
+
+<accessibility>
+- WCAG 2.1 AA compliance
+- Keyboard navigable
+- Screen reader compatible
+</accessibility>
+</evaluation_criteria>
+
+<deployment>
+<environments>
+- Development (local)
+- Preview (PR branches)
+- Production (main branch)
+</environments>
+
+<ci_cd_pipeline>
+1. Lint and type check
+2. Run unit tests
+3. Run integration tests
+4. Build production bundle
+5. Run E2E tests against build
+6. Deploy to preview/production
+</ci_cd_pipeline>
+</deployment>
+
+</project_specification>

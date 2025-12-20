@@ -1,87 +1,30 @@
-#!/usr/bin/env python3
 """
-Ultra Coding Agent - Entry Point
-================================
+Autonomous Agent Loop
+=====================
 
-Start the autonomous coding agent with project-specific configuration.
-
-Example Usage:
-    python start.py --project-dir ./my_project
-    python start.py --project-dir ./my_project --max-iterations 5
+Core logic for running the autonomous agent loop.
 """
 
-import argparse
 import asyncio
-import os
-import subprocess
 from pathlib import Path
+from typing import Optional
 
-# Import library modules
-from lib.orchestrator.session import run_agent_session
-from lib.progress import print_session_header, print_progress_summary, ProgressTracker
-from lib.prompts import get_initializer_prompt, get_coding_prompt
-from lib.hitl import checkpoint, HITLDecision
-
-# Import project-specific modules
-from credentials import get_credentials, print_credential_status, validate_credentials
-from client import create_client
+from ..progress import ProgressTracker, print_session_header, print_progress_summary
+from ..prompts import get_initializer_prompt, get_coding_prompt
+from ..hitl import checkpoint, HITLDecision
+from ..orchestrator.session import run_agent_session
 
 
 # Configuration
-# DEFAULT_MODEL = "claude-opus-4-5-20251101"
-DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
 AUTO_CONTINUE_DELAY_SECONDS = 3
-
-
-def parse_args() -> argparse.Namespace:
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Ultra Coding Agent - Autonomous AI development harness",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Start fresh project
-  python start.py --project-dir ./my_project
-
-  # Use a specific model
-  python start.py --project-dir ./my_project --model claude-sonnet-4-5-20250929
-
-  # Limit iterations for testing
-  python start.py --project-dir ./my_project --max-iterations 5
-
-Environment Variables:
-  ANTHROPIC_API_KEY    Your Anthropic API key (optional if using Claude Code subscription)
-        """,
-    )
-
-    parser.add_argument(
-        "--project-dir",
-        type=Path,
-        default=Path("./generations/autonomous_demo_project"),
-        help="Directory for the project (default: generations/autonomous_demo_project)",
-    )
-
-    parser.add_argument(
-        "--max-iterations",
-        type=int,
-        default=None,
-        help="Maximum number of agent iterations (default: unlimited)",
-    )
-
-    parser.add_argument(
-        "--model",
-        type=str,
-        default=DEFAULT_MODEL,
-        help=f"Claude model to use (default: {DEFAULT_MODEL})",
-    )
-
-    return parser.parse_args()
 
 
 async def run_autonomous_agent(
     project_dir: Path,
     model: str,
-    max_iterations: int | None = None,
+    create_client_fn,
+    creds,
+    max_iterations: Optional[int] = None,
 ) -> None:
     """
     Run the autonomous agent loop.
@@ -89,10 +32,12 @@ async def run_autonomous_agent(
     Args:
         project_dir: Directory for the project
         model: Claude model to use
+        create_client_fn: Function to create the Claude client
+        creds: Credentials for the client
         max_iterations: Maximum number of iterations (None for unlimited)
     """
     print("\n" + "=" * 70)
-    print("  ULTRA CODING AGENT")
+    print("  BLUESHIFT AUTONOMOUS AGENT")
     print("=" * 70)
     print(f"\nProject directory: {project_dir}")
     print(f"Model: {model}")
@@ -101,64 +46,6 @@ async def run_autonomous_agent(
     else:
         print("Max iterations: Unlimited (will run until completion)")
     print()
-
-    # Load and validate credentials
-    print("Loading credentials...")
-    creds = get_credentials()
-    print_credential_status(creds)
-
-    # Show warnings for missing optional credentials
-    warnings = validate_credentials(creds, require_all=False)
-    for warning in warnings:
-        print(f"  {warning}")
-    print()
-
-    # Create project directory
-    project_dir.mkdir(parents=True, exist_ok=True)
-
-    # Initialize git repository in the project directory if it doesn't exist
-    # This keeps the generated project separate from the harness repository
-    project_git_dir = project_dir / ".git"
-    if not project_git_dir.exists():
-        print("Initializing git repository in project directory...")
-        result = subprocess.run(
-            ["git", "init"],
-            cwd=project_dir,
-            capture_output=True,
-            text=True
-        )
-        if result.returncode == 0:
-            print(f"  Created git repository in {project_dir}")
-            # Create initial .gitignore
-            gitignore = project_dir / ".gitignore"
-            if not gitignore.exists():
-                gitignore.write_text(
-                    "# Python\n"
-                    "__pycache__/\n"
-                    "*.pyc\n"
-                    ".venv/\n"
-                    "venv/\n"
-                    "\n"
-                    "# Environment\n"
-                    ".env\n"
-                    ".env.local\n"
-                    "\n"
-                    "# IDE\n"
-                    ".idea/\n"
-                    ".vscode/\n"
-                    "\n"
-                    "# Logs\n"
-                    "logs/\n"
-                    "*.log\n"
-                    "\n"
-                    "# Terraform\n"
-                    ".terraform/\n"
-                    "*.tfstate*\n"
-                )
-                print("  Created .gitignore")
-        else:
-            print(f"  Warning: git init failed: {result.stderr}")
-        print()
 
     # Initialize progress tracker
     tracker = ProgressTracker(project_dir)
@@ -173,18 +60,6 @@ async def run_autonomous_agent(
         print("  Watch for [Tool: ...] output to confirm the agent is working.")
         print("=" * 70)
         print()
-        # Note: Project context files (app_spec.txt, etc.) stay in project_context/
-        # and are NOT copied to the generations folder. The agent reads them directly.
-
-        # Copy .env to project directory if it exists and hasn't been copied
-        harness_env = Path(__file__).parent / ".env"
-        project_env = project_dir / ".env"
-        if harness_env.exists() and not project_env.exists():
-            import shutil
-            shutil.copy(harness_env, project_env)
-            print(f"Copied .env to {project_dir}")
-            print("  (The agent can modify this for project-specific needs)")
-            print()
     else:
         print("Continuing existing project")
         print_progress_summary(project_dir)
@@ -205,7 +80,7 @@ async def run_autonomous_agent(
         print_session_header(iteration, is_first_run)
 
         # Create client (fresh context) with credentials
-        client = create_client(project_dir, model, creds)
+        client = create_client_fn(project_dir, model, creds)
 
         # Choose prompt based on session type
         used_initializer = False
@@ -272,9 +147,6 @@ async def run_autonomous_agent(
             print("  HITL CHECKPOINT DETECTED")
             print("=" * 70)
 
-            # Read checkpoint details
-            checkpoint_content = hitl_file.read_text()
-
             # Display and get human decision
             result = checkpoint(
                 name="agent_checkpoint",
@@ -328,6 +200,11 @@ async def run_autonomous_agent(
             await asyncio.sleep(1)
 
     # Final summary
+    _print_final_summary(project_dir)
+
+
+def _print_final_summary(project_dir: Path) -> None:
+    """Print the final summary after agent completion."""
     print("\n" + "=" * 70)
     print("  SESSION COMPLETE")
     print("=" * 70)
@@ -342,43 +219,3 @@ async def run_autonomous_agent(
     print("-" * 70)
 
     print("\nDone!")
-
-
-def main() -> None:
-    """Main entry point."""
-    args = parse_args()
-
-    # Load .env file first
-    from credentials import load_env_file
-    load_env_file()
-
-    # Check for API key (optional - Claude Code subscription token works too)
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("Note: ANTHROPIC_API_KEY not set. Using Claude Code subscription token.")
-        print("      (If you want to use API credits, set ANTHROPIC_API_KEY in .env)")
-        print()
-
-    # Normalize project directory
-    project_dir = args.project_dir
-    if not project_dir.is_absolute() and not str(project_dir).startswith("generations/"):
-        project_dir = Path("generations") / project_dir
-
-    # Run the agent
-    try:
-        asyncio.run(
-            run_autonomous_agent(
-                project_dir=project_dir,
-                model=args.model,
-                max_iterations=args.max_iterations,
-            )
-        )
-    except KeyboardInterrupt:
-        print("\n\nInterrupted by user")
-        print("To resume, run the same command again")
-    except Exception as e:
-        print(f"\nFatal error: {e}")
-        raise
-
-
-if __name__ == "__main__":
-    main()
